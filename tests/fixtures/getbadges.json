@@ -1,0 +1,14 @@
+{
+  "response": {
+    "badges": [
+      { "badgeid": 1, "level": 5, "completion_time": 1, "xp": 500, "scarcity": 100 },
+      { "appid": 220, "badgeid": 1, "border_color": 0, "level": 3, "xp": 300 },
+      { "appid": 440, "badgeid": 1, "border_color": 0, "level": 5, "xp": 500 },
+      { "appid": 570, "badgeid": 1, "border_color": 1, "level": 1, "xp": 100 },
+      { "appid": 730, "badgeid": 1, "border_color": 0, "level": 99, "xp": 9900 },
+      { "appid": 220, "badgeid": 99, "level": 5, "xp": 9999 }
+    ],
+    "player_xp": 1400,
+    "player_level": 15
+  }
+}

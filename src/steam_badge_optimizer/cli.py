@@ -45,14 +45,6 @@ app.add_typer(market_app, name="market")
 app.add_typer(cards_app, name="cards")
 
 
-def _not_yet(feature: str, milestone: str) -> None:
-    typer.secho(
-        f"'{feature}' is not implemented yet (planned for {milestone}).",
-        fg=typer.colors.YELLOW,
-    )
-    raise typer.Exit(code=2)
-
-
 @app.command()
 def version() -> None:
     """Print the Badgewright version."""
@@ -226,9 +218,50 @@ def inventory_import(
 
 
 @badges_app.command("import")
-def badges_import(file: str = typer.Option(..., help="Path to exported badge progress.")) -> None:
-    """Import badge progress (level 0-5 per game, foil status)."""
-    _not_yet("badges import", "Milestone 2")
+def badges_import(
+    file: str | None = typer.Option(None, help="Path to a saved GetBadges JSON (offline)."),
+    steamid: str | None = typer.Option(None, help="SteamID64 / URL / vanity (needs --online)."),
+    online: bool = typer.Option(False, help="Fetch via the Steam Web API (needs a key)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Import per-game badge levels so plans use your real levels, not assumed 0."""
+    from .db import Store
+    from .sources import badge_progress as bp
+    from .sources.http_client import FetchError, SafeClient
+    from .sources.steamid import SteamIdError, resolve_steamid
+
+    settings = Settings.resolve(data_dir=data_dir)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        try:
+            if file:
+                result = bp.import_from_file(store, file)
+            elif steamid and online:
+                api_key = bp.api_key_from_env()
+                if not api_key:
+                    raise bp.MissingApiKeyError()
+                with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+                    id64 = resolve_steamid(steamid, client)
+                    result = bp.import_from_api(store, client, id64, api_key)
+            elif steamid and not online:
+                typer.secho("Fetching badge levels needs --online.", fg=typer.colors.YELLOW)
+                raise typer.Exit(code=2)
+            else:
+                typer.secho(
+                    "Provide --file <getbadges.json>, or --steamid <id> --online.",
+                    fg=typer.colors.YELLOW,
+                )
+                raise typer.Exit(code=2)
+        except bp.MissingApiKeyError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+        except (bp.BadgeProgressError, SteamIdError, FetchError) as exc:
+            typer.secho(f"Import failed: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+    typer.secho(
+        f"Imported badge levels for {result.imported} game(s) into {settings.db_path}.",
+        fg=typer.colors.GREEN,
+    )
 
 
 @prices_app.command("refresh")

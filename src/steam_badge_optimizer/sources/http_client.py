@@ -17,6 +17,7 @@ This is a thin wrapper over ``httpx`` (reuse, not reinvention).
 
 from __future__ import annotations
 
+import re
 import time
 from types import TracebackType
 from typing import Any
@@ -33,7 +34,24 @@ from tenacity.wait import wait_base
 from ..config import USER_AGENT
 from ..safety import assert_safe_request
 
-__all__ = ["FetchError", "HTTPStatusError", "RateLimited", "SafeClient", "SafeResponse"]
+__all__ = [
+    "FetchError",
+    "HTTPStatusError",
+    "RateLimited",
+    "SafeClient",
+    "SafeResponse",
+    "redact_url",
+]
+
+# Query-param names whose values are secrets (e.g. a user's Steam Web API key). We never
+# let these appear in an error message, log line, or exception — a 403/timeout must not
+# leak the key into a traceback.
+_SENSITIVE_PARAM_RE = re.compile(r"(?i)([?&](?:key|token|access_token|secret|password)=)[^&#]*")
+
+
+def redact_url(url: object) -> str:
+    """Return the URL as a string with sensitive query-param values masked."""
+    return _SENSITIVE_PARAM_RE.sub(r"\1REDACTED", str(url))
 
 
 class FetchError(RuntimeError):
@@ -142,25 +160,30 @@ class SafeClient:
         try:
             return retryer(self._do_get, request_url, max_bytes)
         except httpx.TransportError as exc:  # exhausted retries
-            raise FetchError(f"transport error fetching {url}: {exc}") from exc
+            # Redact the wrapped httpx message too — it can echo the request URL.
+            raise FetchError(
+                f"transport error fetching {redact_url(url)}: {redact_url(exc)}"
+            ) from exc
 
     def _do_get(self, request_url: httpx.URL, max_bytes: int | None) -> SafeResponse:
         self._respect_min_interval()
         try:
             with self._client.stream("GET", request_url) as resp:
+                safe_url = redact_url(request_url)
                 if resp.status_code == 429:
                     retry_after = resp.headers.get("Retry-After")
-                    raise RateLimited(str(request_url), float(retry_after) if retry_after else None)
+                    raise RateLimited(safe_url, float(retry_after) if retry_after else None)
                 # Redirects are refused, so a 3xx is an error, not an empty success.
                 if 300 <= resp.status_code < 400:
                     raise FetchError(
-                        f"HTTP {resp.status_code} fetching {request_url} "
-                        "(redirects are not followed)"
+                        f"HTTP {resp.status_code} fetching {safe_url} (redirects are not followed)"
                     )
                 if resp.status_code >= 400:
-                    raise HTTPStatusError(resp.status_code, str(request_url))
+                    raise HTTPStatusError(resp.status_code, safe_url)
                 content = self._read_capped(resp, max_bytes, request_url)
-                status, final_url = resp.status_code, str(resp.url)
+                # Redact the exposed URL too — it may carry a secret query param, and a
+                # caller could log SafeResponse.url. (Redirects are refused, so final==request.)
+                status, final_url = resp.status_code, redact_url(resp.url)
         finally:
             # Never retain cookies between requests — defense in depth.
             self._client.cookies.clear()
@@ -173,7 +196,7 @@ class SafeClient:
         for chunk in resp.iter_bytes():
             total += len(chunk)
             if max_bytes is not None and total > max_bytes:
-                raise FetchError(f"response from {url} exceeded {max_bytes}-byte cap")
+                raise FetchError(f"response from {redact_url(url)} exceeded {max_bytes}-byte cap")
             chunks.append(chunk)
         return b"".join(chunks)
 

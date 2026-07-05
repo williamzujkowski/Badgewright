@@ -6,6 +6,21 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Badge-progress ingestion** (`sources.badge_progress`, `sbo badges import`, Epic 2.4):
+  imports the user's real per-game badge levels so plans use them instead of assuming
+  level 0 (which overstated cost and XP). Primary source is the official Steam Web API
+  `GetBadges` (stable JSON) with the user's key from `SBO_STEAM_API_KEY` — a read-only
+  key, **never persisted** to the DB, provenance, logs, or errors; the guarded client
+  now redacts `key=`/`token=` from any URL it reports. Saved-JSON manual import is the
+  offline fallback. Foil badges out of scope; unknown levels keep the assume-0 fallback.
+
+### Changed
+
+- `SafeClient` redacts sensitive query params (`key`, `token`, `secret`, ...) from all
+  error messages so a 403/timeout can't leak a secret into a traceback.
+
 ## [0.3.0] - 2026-07-05
 
 Makes the optimizer broadly useful and adds market research. **Card-name discovery**
