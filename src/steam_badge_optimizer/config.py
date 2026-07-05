@@ -57,7 +57,7 @@ def account_xp_between(current_level: int, target_level: int) -> int:
 CURRENCY_IDS: dict[str, int] = {"USD": 1, "GBP": 2, "EUR": 3, "CHF": 4, "RUB": 5}
 
 #: Honest, contactable User-Agent. We do not impersonate a browser.
-USER_AGENT = "Badgewright/0.3.0 (+https://github.com/williamzujkowski/Badgewright)"
+USER_AGENT = "Badgewright/0.4.0 (+https://github.com/williamzujkowski/Badgewright)"
 
 
 @dataclass(slots=True)
