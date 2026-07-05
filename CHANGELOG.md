@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-05
+
+Whole-catalog cheapest badges (Epic #71): rank the cheapest badges to make across all of
+Steam — not just games you own — from a bounded, opt-in, rate-polite market price sweep.
+
 ### Added
 
 - **Bulk market sweep** (`sbo market sweep`, `sources.market_sweep`, Epic #71 #73): the
