@@ -33,11 +33,20 @@ from tenacity.wait import wait_base
 from ..config import USER_AGENT
 from ..safety import assert_safe_request
 
-__all__ = ["FetchError", "RateLimited", "SafeClient", "SafeResponse"]
+__all__ = ["FetchError", "HTTPStatusError", "RateLimited", "SafeClient", "SafeResponse"]
 
 
 class FetchError(RuntimeError):
     """A read request failed in a way callers should handle (not a safety violation)."""
+
+
+class HTTPStatusError(FetchError):
+    """A non-OK HTTP status (>=400, excluding 429). Carries the status code so callers
+    can react to specific cases (e.g. 403 for a private Steam inventory)."""
+
+    def __init__(self, status_code: int, url: str) -> None:
+        self.status_code = status_code
+        super().__init__(f"HTTP {status_code} fetching {url}")
 
 
 class RateLimited(FetchError):
@@ -143,11 +152,13 @@ class SafeClient:
                     retry_after = resp.headers.get("Retry-After")
                     raise RateLimited(str(request_url), float(retry_after) if retry_after else None)
                 # Redirects are refused, so a 3xx is an error, not an empty success.
-                if resp.status_code >= 300:
+                if 300 <= resp.status_code < 400:
                     raise FetchError(
                         f"HTTP {resp.status_code} fetching {request_url} "
                         "(redirects are not followed)"
                     )
+                if resp.status_code >= 400:
+                    raise HTTPStatusError(resp.status_code, str(request_url))
                 content = self._read_capped(resp, max_bytes, request_url)
                 status, final_url = resp.status_code, str(resp.url)
         finally:
