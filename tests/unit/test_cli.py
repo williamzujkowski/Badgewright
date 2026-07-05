@@ -36,11 +36,18 @@ def test_init_creates_data_dir(tmp_path) -> None:
     assert (tmp_path / "sbo").is_dir()
 
 
-def test_unimplemented_stub_exits_nonzero() -> None:
-    # badges import is still a stub (badge-progress ingestion, #2.4).
-    result = runner.invoke(app, ["badges", "import", "--file", "x.html"])
+def test_command_needing_args_fails_cleanly_not_with_traceback() -> None:
+    # badges import with no source: a clean guidance message + exit 2, no traceback.
+    result = runner.invoke(app, ["badges", "import"])
     assert result.exit_code == 2
-    assert "not implemented" in result.output.lower()
+    assert "provide --file" in result.output.lower()
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_no_command_advertises_unimplemented() -> None:
+    # Every wired command now does real work — nothing should say "not implemented".
+    result = runner.invoke(app, ["--help"])
+    assert "not implemented" not in result.output.lower()
 
 
 def test_optimize_on_empty_db_is_graceful(tmp_path) -> None:

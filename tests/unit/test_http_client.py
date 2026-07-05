@@ -12,6 +12,7 @@ from steam_badge_optimizer.sources.http_client import (
     FetchError,
     RateLimited,
     SafeClient,
+    redact_url,
 )
 
 ALLOWED = "https://steamcommunity.com/market/priceoverview/"
@@ -40,6 +41,34 @@ class TestGuard:
     def test_no_post_method_exists(self) -> None:
         assert not hasattr(SafeClient, "post")
         assert not hasattr(SafeClient, "put")
+
+
+class TestRedaction:
+    @pytest.mark.parametrize(
+        ("url", "expected_masked"),
+        [
+            ("https://api.steampowered.com/x?key=SECRET&steamid=1", "key=REDACTED"),
+            ("https://h/x?steamid=1&token=abc", "token=REDACTED"),
+            ("https://h/x?access_token=zzz", "access_token=REDACTED"),
+        ],
+    )
+    def test_sensitive_params_masked(self, url: str, expected_masked: str) -> None:
+        out = redact_url(url)
+        assert expected_masked in out
+        assert "SECRET" not in out and "abc" not in out and "zzz" not in out
+
+    def test_non_sensitive_untouched(self) -> None:
+        url = "https://steamcommunity.com/market/priceoverview/?appid=753&market_hash_name=x"
+        assert redact_url(url) == url
+
+    @respx.mock
+    def test_error_message_redacts_key(self) -> None:
+        url = "https://api.steampowered.com/IPlayerService/GetBadges/v1/"
+        respx.get(url).mock(return_value=httpx.Response(500))
+        with _client() as c, pytest.raises(FetchError) as exc:
+            c.get(url, params={"key": "TOPSECRET", "steamid": "1"})
+        assert "TOPSECRET" not in str(exc.value)
+        assert "REDACTED" in str(exc.value)
 
 
 class TestFetch:

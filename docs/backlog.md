@@ -45,7 +45,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 - [x] **2.3** Inventory ingestion — 753/6 parser (join assets<->descriptions, dedup,
   tag-based foil), SafeClient paginated fetch, 403->PrivateInventoryError, file
   fallback; discovered cards feed pricing. See #6.
-- [ ] **2.4** Badge-progress ingestion — level 0–5 per game, foil status, exclude
+- [x] **2.4** Badge-progress ingestion (`sbo badges import`; GetBadges API + file;
+  env-var key never persisted; URL redaction). See #53. — orig: — level 0–5 per game, foil status, exclude
   maxed; start from manual/exported HTML if live parsing is fragile.
 - [ ] **2.5 (NEW, security)** OpenID cookie-jar isolation test — assert no Steam
   session cookie ever reaches the fetch client.
