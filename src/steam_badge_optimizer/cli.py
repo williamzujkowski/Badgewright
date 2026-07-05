@@ -687,5 +687,76 @@ def market_cheapest_badges(
     typer.secho("\nResearch only. Buy cards manually in Steam.", dim=True)
 
 
+SWEEP_MIN_INTERVAL_S = 4.5  # polite floor for the bulk sweep (~1 req / 4-5s) — never faster
+
+
+@market_app.command("sweep")
+def market_sweep_cmd(
+    online: bool = typer.Option(False, help="Allow network access (required, with --confirm)."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Acknowledge this fetches many pages from Steam."
+    ),
+    max_pages: int = typer.Option(20, help="Hard cap on pages fetched (100 cards/page)."),
+    until_sets: int | None = typer.Option(
+        None, help="Stop early once this many badge sets are fully priced."
+    ),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Bounded, opt-in bulk price sweep (cheapest-first). Reads public listings; never trades.
+
+    Off by default: you must pass BOTH --online and --confirm. It is rate-polite,
+    resumable (re-run to continue), and stops hard if Steam rate-limits it.
+    """
+    if max_pages < 1:
+        typer.secho("--max-pages must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not (online and confirm):
+        typer.secho(
+            "The bulk market sweep fetches many pages from Steam, so it is OFF by default.",
+            fg=typer.colors.YELLOW,
+        )
+        typer.echo(
+            "Re-run with BOTH --online and --confirm to proceed. It is cheapest-first, "
+            "rate-polite (~1 req/5s), bounded by --max-pages, and resumable."
+        )
+        raise typer.Exit(code=2)
+
+    from .db import Store
+    from .sources.http_client import SafeClient
+    from .sources.market_sweep import StopReason, sweep_cheapest
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+    typer.echo(f"Sweeping cheapest-first at ~1 req/{interval:.0f}s (Ctrl-C is safe).")
+    with (
+        Store(settings.db_path) as store,
+        SafeClient(min_interval_s=interval) as client,
+    ):
+        result = sweep_cheapest(
+            store,
+            client,
+            settings.data_dir,
+            currency=settings.currency,
+            max_pages=max_pages,
+            stop_after_complete_sets=until_sets,
+            jitter_s=1.0,
+        )
+    typer.secho(
+        f"Swept {result.pages_fetched} page(s); priced {result.cards_priced} card(s); "
+        f"{result.complete_sets} badge set(s) now fully priced.",
+        fg=typer.colors.GREEN,
+    )
+    typer.echo(f"Stopped: {result.stop_reason.value}.")
+    if result.stop_reason is StopReason.RATE_LIMITED:
+        typer.secho(
+            "Steam rate-limited the sweep; progress is saved. Wait a while, then re-run to resume.",
+            fg=typer.colors.YELLOW,
+        )
+    elif result.next_cursor is not None:
+        typer.echo("More remains — re-run `sbo market sweep --online --confirm` to resume.")
+    typer.secho("Then rank results with: sbo market cheapest-badges", dim=True)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

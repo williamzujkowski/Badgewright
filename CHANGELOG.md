@@ -8,6 +8,18 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
+- **Bulk market sweep** (`sbo market sweep`, `sources.market_sweep`, Epic #71 #73): the
+  whole-catalog price source for cheapest-badges. Pages Steam's market search endpoint
+  **cheapest-first**, capturing each card's lowest ask + ask-side depth + foil, so the
+  cheapest-badges ranking works across all of Steam, not just games you pulled in by hand.
+  Fenced hard, every constraint tested: **off by default** (needs BOTH `--online` and
+  `--confirm`); rate-polite (~1 req/5s floor + jitter); **hard-stops** on 429/Cloudflare
+  (progress saved, no retry storm); **resumable** via a cursor file; **bounded** by
+  `--max-pages` with optional `--until-sets` early-exit — it can never sweep the whole
+  ~184k-card market by accident. Reads public listings only; never trades.
+
+### Added
+
 - **Cheapest-badges ranking** (`analytics.rank_cheapest_badges`, `sbo market cheapest-badges`,
   Epic #71 Tier 2): ranks the cheapest badges to make from scratch (full single-set cost =
   sum of each card's lowest ask), cost-per-XP, from cached prices. **Liquidity-gated** — a
