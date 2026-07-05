@@ -175,12 +175,13 @@ def inventory_import(
     file: str | None = typer.Option(None, help="Path to an exported inventory JSON (offline)."),
     steamid: str | None = typer.Option(None, help="SteamID64 / URL / vanity (needs --online)."),
     online: bool = typer.Option(False, help="Allow a network fetch of a public inventory."),
+    max_pages: int = typer.Option(5, help="Max inventory pages to fetch (politeness bound)."),
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
     """Import your trading-card inventory (appid 753 / context 6)."""
     from .db import Store
     from .sources import steam_inventory as si
-    from .sources.http_client import SafeClient
+    from .sources.http_client import FetchError, SafeClient
     from .sources.steamid import SteamIdError, resolve_steamid
 
     settings = Settings.resolve(data_dir=data_dir)
@@ -192,7 +193,7 @@ def inventory_import(
             elif steamid and online:
                 with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
                     id64 = resolve_steamid(steamid, client)
-                    result = si.import_inventory(store, client, id64)
+                    result = si.import_inventory(store, client, id64, max_pages=max_pages)
             elif steamid and not online:
                 typer.secho("Fetching an inventory needs --online.", fg=typer.colors.YELLOW)
                 raise typer.Exit(code=2)
@@ -205,7 +206,8 @@ def inventory_import(
         except si.PrivateInventoryError as exc:
             typer.secho(str(exc), fg=typer.colors.RED)
             raise typer.Exit(code=1) from exc
-        except (si.InventoryParseError, SteamIdError) as exc:
+        except (si.InventoryParseError, SteamIdError, FetchError) as exc:
+            # FetchError covers RateLimited (429) and HTTPStatusError (404/500/etc.).
             typer.secho(f"Import failed: {exc}", fg=typer.colors.RED)
             raise typer.Exit(code=1) from exc
     typer.secho(
@@ -213,6 +215,12 @@ def inventory_import(
         f"{result.total_assets} assets) into {settings.db_path}.",
         fg=typer.colors.GREEN,
     )
+    if result.truncated:
+        typer.secho(
+            f"Warning: inventory was truncated at {max_pages} pages — some cards are "
+            "missing. Re-run with a higher --max-pages, or use --file with an export.",
+            fg=typer.colors.YELLOW,
+        )
 
 
 @badges_app.command("import")

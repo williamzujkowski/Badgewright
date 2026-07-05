@@ -120,15 +120,49 @@ class TestFetch:
         assert respx.calls.call_count == 2
 
     @respx.mock
-    def test_max_pages_bounds_requests(self) -> None:
+    def test_max_pages_bounds_and_flags_truncation(self) -> None:
         url = inv.INVENTORY_URL.format(steamid=STEAMID)
-        endless = {
-            "assets": [],
-            "descriptions": [],
-            "more_items": 1,
-            "last_assetid": "1",
-        }
+        endless = {"assets": [], "descriptions": [], "more_items": 1, "last_assetid": "1"}
         respx.get(url).mock(return_value=httpx.Response(200, content=orjson.dumps(endless)))
         with SafeClient() as c:
-            inv.fetch_inventory(c, STEAMID, max_pages=3)
+            raw = inv.fetch_inventory(c, STEAMID, max_pages=3)
         assert respx.calls.call_count == 3  # bounded, did not loop forever
+        assert inv.parse_inventory_json(raw).truncated is True  # partial result flagged
+
+    @respx.mock
+    def test_missing_cursor_stops_without_none_string(self) -> None:
+        url = inv.INVENTORY_URL.format(steamid=STEAMID)
+        # more_items truthy but no last_assetid: must stop, not send start_assetid=None.
+        respx.get(url).mock(
+            return_value=httpx.Response(200, content=orjson.dumps({"assets": [], "more_items": 1}))
+        )
+        with SafeClient() as c:
+            inv.fetch_inventory(c, STEAMID, max_pages=5)
+        assert respx.calls.call_count == 1
+        assert "start_assetid" not in str(respx.calls.last.request.url)
+
+    @respx.mock
+    def test_non_403_http_error_propagates(self) -> None:
+        from steam_badge_optimizer.sources.http_client import HTTPStatusError
+
+        respx.get(inv.INVENTORY_URL.format(steamid=STEAMID)).mock(return_value=httpx.Response(404))
+        with SafeClient() as c, pytest.raises(HTTPStatusError):
+            inv.fetch_inventory(c, STEAMID)
+
+
+class TestCli:
+    def test_online_404_is_clean_error_not_traceback(self) -> None:
+        from typer.testing import CliRunner
+
+        from steam_badge_optimizer.cli import app
+
+        runner = CliRunner()
+        with respx.mock:
+            respx.get(inv.INVENTORY_URL.format(steamid=STEAMID)).mock(
+                return_value=httpx.Response(404)
+            )
+            result = runner.invoke(
+                app, ["inventory", "import", "--steamid", str(STEAMID), "--online"]
+            )
+        assert result.exit_code == 1
+        assert "Import failed" in result.output

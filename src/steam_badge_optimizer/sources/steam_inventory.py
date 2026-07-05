@@ -79,6 +79,8 @@ class InventoryResult:
     cards: list[ParsedCard]
     skipped: int
     total_assets: int
+    truncated: bool = False
+    """True if a paged fetch hit max_pages with more items remaining (partial result)."""
 
 
 def _tags_by_category(desc: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -189,7 +191,12 @@ def parse_inventory_json(raw: bytes) -> InventoryResult:
             tradable=bool(desc.get("tradable", 1)),
         )
         cards.append(ParsedCard(inventory=inv, card=card))
-    return InventoryResult(cards=cards, skipped=skipped, total_assets=len(assets))
+    return InventoryResult(
+        cards=cards,
+        skipped=skipped,
+        total_assets=len(assets),
+        truncated=bool(data.get("_truncated", False)),
+    )
 
 
 def _validate_steamid64(steamid64: int) -> int:
@@ -215,6 +222,7 @@ def fetch_inventory(
     all_assets: list[Any] = []
     all_descriptions: list[Any] = []
     start_assetid: str | None = None
+    truncated = False
     try:
         for _ in range(max_pages):
             params: dict[str, Any] = {"l": language, "count": page_count}
@@ -228,12 +236,20 @@ def fetch_inventory(
             all_descriptions.extend(page.get("descriptions") or [])
             if not page.get("more_items"):
                 break
-            start_assetid = str(page.get("last_assetid"))
+            next_cursor = page.get("last_assetid")
+            if not next_cursor:
+                break  # more_items claimed but no cursor — stop rather than loop on "None"
+            start_assetid = str(next_cursor)
+        else:
+            # Loop exhausted max_pages while more items remained: the result is partial.
+            truncated = True
     except HTTPStatusError as exc:
         if exc.status_code == 403:
             raise PrivateInventoryError(steamid64) from exc
         raise
-    return orjson.dumps({"assets": all_assets, "descriptions": all_descriptions})
+    return orjson.dumps(
+        {"assets": all_assets, "descriptions": all_descriptions, "_truncated": truncated}
+    )
 
 
 def _persist(store: Store, result: InventoryResult, source: SourceRecord) -> None:
