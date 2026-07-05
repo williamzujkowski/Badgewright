@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
+- **Greedy optimizer + `sbo optimize`** (Epic 5.2): ranks complete badges by
+  cost-per-XP and fills to a `--budget` and/or an account-`--target-level` (via the
+  Steam XP step function), explaining chosen vs skipped, surfacing ready-to-craft and
+  incomplete badges separately, and printing a read-only disclaimer. The core
+  "cheapest way to gain N levels" answer, working end-to-end from local data.
+- `config.account_xp_between` — Steam account-level XP math (100 * ceil(level/10)).
 - Cost-to-complete calculator (`optimize.compute_costs`, Epic 5.1): per-badge cost to
   reach a target level from cached catalog + inventory + prices. Handles current level
   (crafts_needed = target - level), surfaces ready-to-craft badges, and — fail-closed —

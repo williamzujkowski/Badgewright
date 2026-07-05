@@ -276,13 +276,106 @@ def prices_refresh(
 
 @app.command()
 def optimize(
-    budget: float | None = typer.Option(None, help="Spend cap for the plan."),
-    current_level: int | None = typer.Option(None, help="Your current Steam level."),
-    target_level: int | None = typer.Option(None, help="Desired Steam level."),
-    exclude_foil: bool = typer.Option(True, help="Exclude foil badges (thin markets)."),
+    budget: float | None = typer.Option(None, help="Spend cap for the plan (e.g. 50 = $50)."),
+    current_level: int | None = typer.Option(None, help="Your current Steam account level."),
+    target_level: int | None = typer.Option(None, help="Desired Steam account level."),
+    badge_level: int = typer.Option(5, help="Target level for each game badge (1-5)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Compute the cheapest badge-completion plan (greedy; provably optimal for uniform XP)."""
-    _not_yet("optimize", "Milestone 4")
+    """Compute the cheapest badge-completion plan (greedy by cost-per-XP)."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from .config import MAX_NORMAL_BADGE_LEVEL, account_xp_between
+    from .db import Store
+    from .models import Money
+    from .optimize import build_plan, compute_costs
+
+    if not (1 <= badge_level <= MAX_NORMAL_BADGE_LEVEL):
+        typer.secho(f"--badge-level must be 1..{MAX_NORMAL_BADGE_LEVEL}.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if budget is not None and budget < 0:
+        typer.secho("--budget must be >= 0.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    currency = settings.currency
+    target_xp: int | None = None
+    if target_level is not None:
+        if current_level is None:
+            typer.secho("--target-level also needs --current-level.", fg=typer.colors.RED)
+            raise typer.Exit(code=2)
+        target_xp = account_xp_between(current_level, target_level)
+    elif current_level is not None:
+        typer.secho(
+            "--current-level is only used with --target-level; ignoring it.",
+            fg=typer.colors.YELLOW,
+        )
+
+    # Exact currency conversion (avoid binary float drift on e.g. 1.005).
+    money_budget = (
+        Money(int((Decimal(str(budget)) * 100).to_integral_value(ROUND_HALF_UP)), currency)
+        if budget is not None
+        else None
+    )
+    with Store(settings.db_path) as store:
+        report = compute_costs(store, target_level=badge_level, currency=currency)
+        plan = build_plan(report, budget=money_budget, target_xp=target_xp)
+
+    if (
+        not plan.chosen
+        and not plan.ready_to_craft
+        and not plan.incomplete
+        and not plan.skipped_over_budget
+    ):
+        typer.echo("No badges to plan yet. Import a catalog, inventory, and prices first.")
+        return
+
+    chosen_appids = {b.appid for b in plan.chosen}
+    free_now = [b for b in plan.ready_to_craft if b.appid not in chosen_appids]
+    if free_now:
+        typer.secho("Ready to craft now (you own a full set — free):", bold=True)
+        for b in free_now:
+            typer.echo(f"  appid {b.appid}: craft the next level now, no purchase")
+    typer.secho(f"\nRecommended purchases (cheapest cost-per-XP, {currency}):", bold=True)
+    if not plan.chosen:
+        typer.echo("  (none fit the constraints)")
+    for b in plan.chosen:
+        cost = b.known_cost.amount if b.known_cost else 0
+        ready = " — own a full set; next level free, rest priced" if b.ready_to_craft else ""
+        typer.echo(
+            f"  appid {b.appid}: {b.crafts_needed} level(s), +{b.expected_xp} XP, "
+            f"~{cost:.2f} {currency} [{b.confidence.value}]{ready}"
+        )
+    typer.secho(f"\nTotal: {plan.total_cost.amount:.2f} {currency}, +{plan.total_xp} XP", bold=True)
+    if plan.skipped_over_budget:
+        typer.secho(
+            f"\n{len(plan.skipped_over_budget)} badge(s) skipped — over budget:",
+            fg=typer.colors.YELLOW,
+        )
+        for b in plan.skipped_over_budget:
+            cost = b.known_cost.amount if b.known_cost else 0
+            typer.echo(f"  appid {b.appid}: ~{cost:.2f} {currency} for +{b.expected_xp} XP")
+    if plan.budget is not None and plan.budget_remaining is not None:
+        typer.echo(f"Budget remaining: {plan.budget_remaining.amount:.2f} {currency}")
+        typer.secho(
+            "(Greedy by cost-per-XP; near a tight budget the plan may be slightly sub-optimal.)",
+            dim=True,
+        )
+    if target_xp is not None:
+        status = "reached" if plan.target_reached else "NOT reached"
+        typer.echo(f"XP target {target_xp} {status}.")
+    for note in plan.notes:
+        typer.secho(note, fg=typer.colors.YELLOW)
+    if plan.incomplete:
+        typer.secho(
+            f"\n{len(plan.incomplete)} badge(s) need card discovery/pricing before they "
+            "can be costed (run inventory import + prices refresh).",
+            fg=typer.colors.YELLOW,
+        )
+    typer.secho(
+        "\nThis is a research plan. Buy cards manually in Steam; Badgewright never trades.",
+        dim=True,
+    )
 
 
 @report_app.command("purchase-plan")
