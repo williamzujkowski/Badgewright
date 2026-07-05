@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -48,6 +49,28 @@ class TestMigrations:
         before = schema_version(store.conn)
         assert apply_migrations(store.conn) == before  # no-op second run
         assert apply_migrations(store.conn) == before
+
+    def test_failed_migration_rolls_back_atomically(self, store: Store, monkeypatch) -> None:
+        # A migration whose last statement is invalid must leave NO partial state and
+        # NOT bump user_version, so the runner can retry cleanly (the HIGH finding).
+        good_then_bad = [
+            "CREATE TABLE t_probe (x INTEGER)",
+            "INSERT INTO t_probe (x) VALUES (1)",
+            "THIS IS NOT SQL",
+        ]
+        monkeypatch.setattr(
+            "steam_badge_optimizer.db.schema.MIGRATIONS",
+            [*MIGRATIONS, good_then_bad],
+        )
+        before = schema_version(store.conn)
+        with pytest.raises(sqlite3.OperationalError):
+            apply_migrations(store.conn)
+        assert schema_version(store.conn) == before  # not bumped
+        # The partial table must have been rolled back.
+        exists = store.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='t_probe'"
+        ).fetchone()
+        assert exists is None
 
     def test_persists_to_file(self, tmp_path) -> None:
         db = tmp_path / "sbo.sqlite3"
@@ -103,13 +126,39 @@ class TestPriceHistoryAndProvenance:
         assert [h.lowest.cents for h in hist] == [3, 4]
         assert store.latest_price(440, "440-Heavy").lowest.cents == 4
 
-    def test_same_source_hash_dedups(self, store: Store) -> None:
+    def test_same_fetch_dedups(self, store: Store) -> None:
         t0 = datetime(2026, 7, 1, tzinfo=UTC)
         assert store.add_price_snapshot(self._snap(3, b"same", t0)) is True
-        # Re-importing the identical fetch (same bytes => same sha256) is a no-op.
+        # Re-importing the identical fetch (same item, same fetch time) is a no-op.
         assert store.add_price_snapshot(self._snap(3, b"same", t0)) is False
         assert len(store.price_history(440, "440-Heavy")) == 1
         assert store.source_count() == 1
+
+    def test_unchanged_price_at_later_time_is_new_point(self, store: Store) -> None:
+        # Byte-identical payloads at DIFFERENT fetch times are distinct observations
+        # (the MEDIUM finding): price history must not collapse them.
+        t0 = datetime(2026, 7, 1, tzinfo=UTC)
+        assert store.add_price_snapshot(self._snap(3, b"same", t0)) is True
+        assert store.add_price_snapshot(self._snap(3, b"same", t0 + timedelta(days=1))) is True
+        assert len(store.price_history(440, "440-Heavy")) == 2
+
+    def test_currency_mismatch_rejected(self) -> None:
+        # Enforced at the model layer, so a lossy single-currency row can't be built.
+        with pytest.raises(ValueError):
+            PriceSnapshot(
+                item=MarketItem(appid=1, market_hash_name="c"),
+                lowest=Money(3, "USD"),
+                median=Money(5, "EUR"),
+                source=_source(b"x"),
+            )
+
+    def test_foreign_key_enforced(self, store: Store) -> None:
+        with pytest.raises(sqlite3.IntegrityError):
+            store.conn.execute(
+                "INSERT INTO price_snapshot "
+                "(appid, market_hash_name, currency, fetched_at, source_id) "
+                "VALUES (1, 'c', 'USD', '2026-07-01T00:00:00+00:00', 99999)"
+            )
 
     def test_provenance_round_trips(self, store: Store) -> None:
         store.add_price_snapshot(self._snap(3, b"a", datetime(2026, 7, 1, tzinfo=UTC)))

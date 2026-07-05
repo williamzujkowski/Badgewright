@@ -39,7 +39,9 @@ class Store:
 
     def __init__(self, path: str | Path = ":memory:") -> None:
         self._path = str(path)
-        self.conn = sqlite3.connect(self._path)
+        # isolation_level=None => autocommit: statements commit immediately and the
+        # migration runner can manage its own explicit BEGIN/COMMIT transactions.
+        self.conn = sqlite3.connect(self._path, isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         apply_migrations(self.conn)
@@ -65,31 +67,37 @@ class Store:
     # --- provenance ---------------------------------------------------------
 
     def record_source(self, source: SourceRecord) -> int:
-        """Insert a source record (dedup by raw_sha256); return its row id."""
+        """Insert a source record; return its row id.
+
+        A retrieval is identified by ``(raw_sha256, fetched_at)`` — re-importing the
+        exact same fetch dedups, but a later fetch returning identical bytes is a new
+        row so time-series resolution is preserved.
+        """
+        fetched_at = source.fetched_at.isoformat()
         cur = self.conn.execute(
             """
             INSERT INTO source_record
                 (kind, url, file_name, fetched_at, parser_version, raw_sha256,
                  cache_ttl_seconds, http_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(raw_sha256) DO NOTHING
+            ON CONFLICT(raw_sha256, fetched_at) DO NOTHING
             """,
             (
                 str(source.kind),
                 str(source.url) if source.url is not None else None,
                 source.file_name,
-                source.fetched_at.isoformat(),
+                fetched_at,
                 source.parser_version,
                 source.raw_sha256,
                 source.cache_ttl_seconds,
                 source.http_status,
             ),
         )
-        self.conn.commit()
         if cur.lastrowid and cur.rowcount:
             return int(cur.lastrowid)
         row = self.conn.execute(
-            "SELECT id FROM source_record WHERE raw_sha256 = ?", (source.raw_sha256,)
+            "SELECT id FROM source_record WHERE raw_sha256 = ? AND fetched_at = ?",
+            (source.raw_sha256, fetched_at),
         ).fetchone()
         return int(row["id"])
 
@@ -165,15 +173,20 @@ class Store:
     # --- price history (append-only, source-hash dedup) --------------------
 
     def add_price_snapshot(self, snap: PriceSnapshot) -> bool:
-        """Append a price observation. Returns False if this exact fetch (same source
-        hash, same item) was already stored, True if a new row was inserted."""
+        """Append a price observation, keyed by (item, fetch time).
+
+        Returns False if an observation for this item at this exact fetch time was
+        already stored (idempotent re-import), True if a new row was inserted. A later
+        fetch with an unchanged price is a new observation and is recorded.
+        """
         source_id = self.record_source(snap.source)
+        fetched_at = snap.source.fetched_at.isoformat()
         existing = self.conn.execute(
             """
             SELECT 1 FROM price_snapshot
-            WHERE source_id = ? AND appid = ? AND market_hash_name = ?
+            WHERE appid = ? AND market_hash_name = ? AND fetched_at = ?
             """,
-            (source_id, snap.item.appid, snap.item.market_hash_name),
+            (snap.item.appid, snap.item.market_hash_name, fetched_at),
         ).fetchone()
         if existing:
             return False

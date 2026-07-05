@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .money import Money
 from .provenance import SourceRecord
@@ -45,6 +45,21 @@ class PriceSnapshot(BaseModel):
     median: Money | None = None
     volume: int | None = Field(default=None, ge=0)
     source: SourceRecord
+
+    @model_validator(mode="after")
+    def _check_single_currency(self) -> PriceSnapshot:
+        # Steam quotes lowest and median in one currency; enforce it so persistence
+        # (one currency column per row) is never lossy.
+        if (
+            self.lowest is not None
+            and self.median is not None
+            and self.lowest.currency != self.median.currency
+        ):
+            raise ValueError(
+                f"lowest ({self.lowest.currency}) and median ({self.median.currency}) "
+                "must share a currency"
+            )
+        return self
 
     @property
     def has_price(self) -> bool:
