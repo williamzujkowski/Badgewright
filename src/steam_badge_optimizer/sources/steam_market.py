@@ -55,6 +55,14 @@ def _parse_money_or_none(text: object, currency: str) -> Money | None:
 
 
 def _parse_volume(text: object) -> int | None:
+    # Steam quotes volume as a grouped integer string ("1,234"), but accept a numeric
+    # JSON value defensively too. bool is an int subclass, so exclude it first.
+    if isinstance(text, bool):
+        return None
+    if isinstance(text, int):
+        return text if text >= 0 else None
+    if isinstance(text, float):
+        return int(text) if text >= 0 else None
     if not isinstance(text, str):
         return None
     digits = re.sub(r"[^0-9]", "", text)

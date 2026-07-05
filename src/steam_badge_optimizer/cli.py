@@ -176,14 +176,14 @@ def prices_refresh(
     if not online:
         typer.secho("Refreshing prices needs the network: pass --online.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=2)
-    if bool(appid) ^ bool(name):
+    if (appid is None) ^ (name is None):
         typer.secho("Provide both --appid and --name, or neither.", fg=typer.colors.RED)
         raise typer.Exit(code=2)
 
     with Store(settings.db_path) as store:
         items = (
             [MarketItem(appid=appid, market_hash_name=name)]
-            if appid and name
+            if appid is not None and name is not None
             else store.list_card_items()[:limit]
         )
         if not items:

@@ -69,6 +69,44 @@ class TestFetchPrice:
             assert sm.fetch_price(c, ITEM) is None
 
     @respx.mock
+    def test_malformed_json_returns_none(self) -> None:
+        _route().mock(return_value=httpx.Response(200, content=b"not json at all"))
+        with SafeClient() as c:
+            assert sm.fetch_price(c, ITEM) is None
+
+    @respx.mock
+    def test_garbage_price_string_returns_none(self) -> None:
+        _route().mock(return_value=_overview(lowest_price="Free", median_price="N/A"))
+        with SafeClient() as c:
+            assert sm.fetch_price(c, ITEM) is None
+
+    @respx.mock
+    def test_median_only_persists(self) -> None:
+        _route().mock(return_value=_overview(median_price="$0.05"))
+        with SafeClient() as c:
+            snap = sm.fetch_price(c, ITEM)
+        assert snap is not None
+        assert snap.lowest is None
+        assert snap.median.cents == 5
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("1,234", 1234),
+            ("1.234", 1234),
+            ("", None),
+            (None, None),
+            ("abc", None),
+            (1234, 1234),
+            (12.0, 12),
+            (True, None),
+            (-5, None),
+        ],
+    )
+    def test_parse_volume_edges(self, value: object, expected: int | None) -> None:
+        assert sm._parse_volume(value) == expected
+
+    @respx.mock
     def test_429_propagates(self) -> None:
         _route().mock(return_value=httpx.Response(429))
         with SafeClient() as c, pytest.raises(RateLimited):
@@ -106,3 +144,20 @@ class TestRefreshPrices:
             r = sm.refresh_prices(store, c, [ITEM], "USD")
             assert (r.fetched, r.failed) == (0, 1)
             assert store.latest_price(440, "440-Heavy") is None
+
+    @respx.mock
+    def test_429_midloop_stops_after_partial_persistence(self) -> None:
+        # First item OK, second returns 429: the first is persisted, the loop stops.
+        _route().mock(
+            side_effect=[_overview(lowest_price="$0.03", volume="10"), httpx.Response(429)]
+        )
+        item_a = MarketItem(appid=440, market_hash_name="440-A")
+        item_b = MarketItem(appid=440, market_hash_name="440-B")
+        item_c = MarketItem(appid=440, market_hash_name="440-C")
+        with Store.in_memory() as store, SafeClient() as c:
+            with pytest.raises(RateLimited):
+                sm.refresh_prices(store, c, [item_a, item_b, item_c], "USD")
+            assert store.latest_price(440, "440-A") is not None  # A persisted
+            assert store.latest_price(440, "440-B") is None  # B/C never stored
+            assert store.latest_price(440, "440-C") is None
+            assert respx.calls.call_count == 2  # C never attempted
