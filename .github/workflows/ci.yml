@@ -88,9 +88,14 @@ jobs:
             --cap-drop ALL -v bw-ci-data:/data badgewright:ci catalog list)
           echo "$out"
           echo "$out" | grep -q "Team Fortress 2"
-      - name: Image bakes no user database
+      - name: Image bakes no user database or secrets
         run: |
-          # A *.sqlite3 must never be baked into the image (only in the mounted volume).
-          if docker run --rm --entrypoint sh badgewright:ci -c 'ls -1 /data 2>/dev/null | grep -q sqlite3'; then
-            echo "ERROR: a database was baked into the image"; exit 1
+          # Scan the WHOLE filesystem (as root so nothing is hidden) — a database, .env,
+          # or secret must never be baked into any layer; local data lives only in the
+          # mounted volume at runtime.
+          found=$(docker run --rm --user 0 --entrypoint sh badgewright:ci -c \
+            'find / -xdev \( -name "*.sqlite3" -o -name "*.db" -o -name ".env" \) 2>/dev/null')
+          if [ -n "$found" ]; then
+            echo "ERROR: database/secret baked into the image:"; echo "$found"; exit 1
           fi
+          echo "clean: no baked database or secrets"

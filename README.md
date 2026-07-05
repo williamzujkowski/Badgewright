@@ -79,7 +79,9 @@ Notes:
 
 - Use a **named volume** (as above) so the container's non-root user (UID 10001) can
   write; a host bind-mount would need matching ownership.
-- Mount your own input files **read-only** (`:ro`) and ensure they're readable.
+- Mount your own input files **read-only** (`:ro`) and make sure they're readable by the
+  container user, e.g. `chmod +r badges.json` (a restrictive umask can leave a file
+  unreadable to UID 10001, giving `Permission denied`).
 - The hardened flags (`--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges`)
   are safe because the app only ever writes to the mounted `/data` volume.
 
