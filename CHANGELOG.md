@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-05
+
+Liquidity precision: confirm a cheap badge is really buyable with real 24h volume, and
+never present a price a buyer couldn't fill.
+
 ### Added
 
 - **Top-K liquidity enrichment** for `sbo market cheapest-badges` (Epic #71 #74, reshaped):
