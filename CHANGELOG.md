@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Order-book-depth cost model** (#15): the cost calculator no longer prices k copies of
+  a card at `k * lowest` (an under-budget, since `lowest` is a single-unit ask). Extra
+  copies are now priced at a conservative book-walk proxy — the median transacted price,
+  **capped at 2x lowest** so a spiky median can't wildly over-estimate — or a documented
+  +15% inflation when no median is cached. The estimate never undershoots `k * lowest`
+  and is monotonic in quantity; it stays labeled "modeled, not order-book-measured" with
+  capped confidence. Real depth via itemordershistogram remains a later precision upgrade
+  (#4.5). Replaces the interim floor note from #55.
+
 ## [0.4.0] - 2026-07-05
 
 Accuracy and research depth: plans now use your **real badge levels**, the cost model is

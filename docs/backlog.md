@@ -74,7 +74,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   volatility/staleness metric (snapshots alone can't yield it). Blocks 6.3.
 - [ ] **4.5 (NEW, optimizer)** `itemordershistogram` integration — buy-side depth &
   true spread; needs an `item_nameid` scrape. Blocks a real "spread" metric in 6.1.
-- [ ] **4.6 (NEW, optimizer)** Order-book depth / multi-unit price walk — `lowest_price`
+- [x] **4.6** Order-book depth / multi-unit price walk — conservative offline model
+  (median-capped, never undershoots, modeled-not-measured). See #15. Real depth: #4.5. — orig: — `lowest_price`
   is 1-unit; buying k copies underestimates cost. Model depth or inflation factor.
   **Highest-impact correctness issue for the optimizer.** Blocks 5.1 accuracy.
 
