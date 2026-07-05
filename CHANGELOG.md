@@ -8,6 +8,10 @@ versioning once it reaches 1.0.
 
 ### Added — Milestone 2 (in progress)
 
+- Market price fetcher (`sources.steam_market`, `sbo prices refresh`): fetches the
+  unofficial `priceoverview` via SafeClient, parses localized lowest/median into
+  `Money` + volume, persists a `PriceSnapshot` with TTL, reuses fresh cached prices,
+  degrades gracefully on missing/failed lookups, and surfaces HTTP 429.
 - Guarded read-only HTTP client (`sources.SafeClient`): the single httpx egress
   point — validates method+URL via the safety guard before any socket, exposes only
   read verbs, keeps no cookie jar, sends an honest User-Agent, surfaces HTTP 429

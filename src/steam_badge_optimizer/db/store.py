@@ -223,6 +223,13 @@ class Store:
         rows = self.conn.execute("SELECT * FROM steam_app ORDER BY appid").fetchall()
         return [SteamApp(appid=r["appid"], name=r["name"]) for r in rows]
 
+    def list_card_items(self) -> list[MarketItem]:
+        """All known cards as MarketItems (the set the price fetcher can refresh)."""
+        rows = self.conn.execute(
+            "SELECT appid, market_hash_name FROM card ORDER BY appid, market_hash_name"
+        ).fetchall()
+        return [MarketItem(appid=r["appid"], market_hash_name=r["market_hash_name"]) for r in rows]
+
     def price_history(self, appid: int, market_hash_name: str) -> list[PriceSnapshot]:
         """All price observations for an item, oldest first."""
         rows = self.conn.execute(
