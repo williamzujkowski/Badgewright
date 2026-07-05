@@ -60,9 +60,9 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 4 — Market data collection & caching
 
-- [ ] **4.1** `priceoverview` fetcher — appid/currency/market_hash_name; parse
-  **localized string prices** per currency; store lowest/median/volume/status/errors;
-  cache aggressively; failed lookups don't crash optimization.
+- [x] **4.1** `priceoverview` fetcher — via SafeClient; parse localized lowest/median
+  into Money + volume; persist PriceSnapshot with TTL; reuse fresh cache; graceful on
+  missing/failed lookups; 429 surfaced. `sbo prices refresh`. See #32.
 - [ ] **4.2** Market listing-page parser — extract embedded price-history where
   available; store HTML hash + parser version; structured diagnostics on failure.
 - [ ] **4.3** Rate-limit & politeness layer — per-host token bucket + jitter; respect

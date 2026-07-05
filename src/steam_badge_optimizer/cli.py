@@ -159,11 +159,47 @@ def badges_import(file: str = typer.Option(..., help="Path to exported badge pro
 
 @prices_app.command("refresh")
 def prices_refresh(
-    limit: int = typer.Option(100, help="Max items to refresh."),
-    cache_ttl: str = typer.Option("24h", help="How long cached prices stay fresh."),
+    appid: int | None = typer.Option(None, help="Price a single item (with --name)."),
+    name: str | None = typer.Option(None, help="Market hash name (with --appid)."),
+    limit: int = typer.Option(200, help="Max known cards to refresh."),
+    force: bool = typer.Option(False, help="Refetch even if a cached price is still fresh."),
+    online: bool = typer.Option(False, help="Allow network fetches (required)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Refresh cached prices for known missing cards (rate-limited, opt-in network)."""
-    _not_yet("prices refresh", "Milestone 3")
+    """Refresh cached market prices (opt-in network; caches with TTL; surfaces 429)."""
+    from .db import Store
+    from .models import MarketItem
+    from .sources import steam_market as sm
+    from .sources.http_client import RateLimited, SafeClient
+
+    settings = Settings.resolve(data_dir=data_dir)
+    if not online:
+        typer.secho("Refreshing prices needs the network: pass --online.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=2)
+    if (appid is None) ^ (name is None):
+        typer.secho("Provide both --appid and --name, or neither.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    with Store(settings.db_path) as store:
+        items = (
+            [MarketItem(appid=appid, market_hash_name=name)]
+            if appid is not None and name is not None
+            else store.list_card_items()[:limit]
+        )
+        if not items:
+            typer.echo("No cards known yet — import inventory or discover card names first.")
+            return
+        with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+            try:
+                result = sm.refresh_prices(store, client, items, settings.currency, force=force)
+            except RateLimited as exc:
+                typer.secho(f"Stopped: {exc}", fg=typer.colors.RED)
+                raise typer.Exit(code=1) from exc
+    typer.secho(
+        f"Prices: {result.fetched} fetched, {result.skipped_cached} cached, "
+        f"{result.failed} unavailable.",
+        fg=typer.colors.GREEN,
+    )
 
 
 @app.command()

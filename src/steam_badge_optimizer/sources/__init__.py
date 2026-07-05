@@ -5,4 +5,9 @@ All network egress goes through :class:`~steam_badge_optimizer.sources.http_clie
 
 from .http_client import FetchError, RateLimited, SafeClient, SafeResponse
 
-__all__ = ["FetchError", "RateLimited", "SafeClient", "SafeResponse"]
+__all__ = [
+    "FetchError",
+    "RateLimited",
+    "SafeClient",
+    "SafeResponse",
+]
