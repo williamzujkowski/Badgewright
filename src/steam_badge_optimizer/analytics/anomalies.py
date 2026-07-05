@@ -6,15 +6,17 @@ cards whose recent price looks unusual, for a human to investigate. Executes not
 Detectors (each pure, over one card's same-currency lowest-price series):
 
 * ``SUDDEN_DROP`` — the latest lowest is well below the trailing mean of prior points.
-* ``MEAN_REVERSION`` — the latest lowest is a statistical low outlier vs its own history
-  (z-score below a threshold), so it *may* revert upward.
 * ``STALE_MEDIAN`` — the latest snapshot's median sits far above its live lowest ask,
   i.e. recent sale prices haven't caught up to a dropped ask.
 
 Fail-closed: a card with fewer than :data:`MIN_SNAPSHOTS` same-currency history points is
-skipped ("insufficient history") — no anomaly is fabricated from sparse data. Every
-result carries a caveat and a coarse (never HIGH) confidence, because anomalies are
-speculative by nature.
+skipped ("insufficient history"), and prices below :data:`MIN_MEANINGFUL_CENTS` are
+skipped because integer-cent jitter on penny cards dwarfs any real signal. Every result
+carries a caveat and a coarse (never HIGH) confidence — anomalies are speculative.
+
+A z-score-based mean-reversion detector was intentionally dropped: at small sample
+sizes it fired on ~7% of perfectly stable series (a scale-invariant artifact), which
+would mislead. It can return later with a leave-one-out estimator and larger N (#57).
 """
 
 from __future__ import annotations
@@ -38,13 +40,14 @@ __all__ = [
 
 MIN_SNAPSHOTS = 5
 DROP_FACTOR = 0.7  # latest < 70% of the trailing mean = a sudden drop
-REVERSION_Z = -1.5  # z-score at/below which the latest point is a low outlier
 STALE_MEDIAN_FACTOR = 1.5  # median > 1.5x the live lowest = a stale/lagging median
+# Below this, integer-cent quantization (a 1-cent wiggle on a 3-cent card is a 33% move)
+# swamps any real signal, so we don't flag anomalies on such penny markets.
+MIN_MEANINGFUL_CENTS = 15
 
 
 class AnomalyKind(StrEnum):
     SUDDEN_DROP = "sudden_drop"
-    MEAN_REVERSION = "mean_reversion"
     STALE_MEDIAN = "stale_median"
 
 
@@ -87,7 +90,8 @@ def _detect_for_item(appid: int, name: str, store: Store, currency: str) -> list
     found: list[Anomaly] = []
 
     trailing_mean = statistics.fmean(prior)
-    if trailing_mean > 0 and latest_cents < DROP_FACTOR * trailing_mean:
+    # Require a meaningful price level so penny-card integer-cent jitter can't fake a drop.
+    if trailing_mean >= MIN_MEANINGFUL_CENTS and latest_cents < DROP_FACTOR * trailing_mean:
         found.append(
             Anomaly(
                 appid=appid,
@@ -102,30 +106,11 @@ def _detect_for_item(appid: int, name: str, store: Store, currency: str) -> list
             )
         )
 
-    all_mean = statistics.fmean(series)
-    sd = statistics.pstdev(series)
-    if sd > 0:
-        z = (latest_cents - all_mean) / sd
-        if z <= REVERSION_Z:
-            found.append(
-                Anomaly(
-                    appid=appid,
-                    market_hash_name=name,
-                    kind=AnomalyKind.MEAN_REVERSION,
-                    latest=Money(latest_cents, currency),
-                    reference=Money(round(all_mean), currency),
-                    magnitude=min(2.0, abs(z)),
-                    confidence=conf,
-                    caveat="latest is a statistical low vs its own history — MAY revert "
-                    "upward, but low prices can also persist; not a prediction",
-                )
-            )
-
     median = history[-1].median
     if (
         median is not None
         and median.currency == currency
-        and latest_cents > 0
+        and latest_cents >= MIN_MEANINGFUL_CENTS
         and median.cents > STALE_MEDIAN_FACTOR * latest_cents
     ):
         found.append(

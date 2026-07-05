@@ -59,6 +59,19 @@ class TestFailClosed:
             _hist(store, "1-A", [100] * (MIN_SNAPSHOTS + 2))
             assert detect_anomalies(store) == []
 
+    def test_mild_noise_is_not_an_anomaly(self) -> None:
+        # A dead-stable dollar card with a few cents of jitter must NOT flag (the
+        # z-score detector that fired ~7% on such series was removed).
+        with Store.in_memory() as store:
+            _hist(store, "1-A", [100, 101, 99, 100, 98, 102, 99])
+            assert detect_anomalies(store) == []
+
+    def test_penny_card_jitter_not_a_drop(self) -> None:
+        # 1-cent integer jitter on a ~3c card is a 30%+ move but is pure noise.
+        with Store.in_memory() as store:
+            _hist(store, "1-A", [4, 3, 4, 3, 2, 3])
+            assert detect_anomalies(store) == []  # below MIN_MEANINGFUL_CENTS
+
     def test_top_must_be_positive(self) -> None:
         with Store.in_memory() as store, pytest.raises(ValueError):
             detect_anomalies(store, top=0)
@@ -70,12 +83,6 @@ class TestDetectors:
             _hist(store, "1-A", [100, 100, 100, 100, 20])  # latest 20 << mean ~100
             kinds = {a.kind for a in detect_anomalies(store)}
             assert AnomalyKind.SUDDEN_DROP in kinds
-
-    def test_mean_reversion_outlier(self) -> None:
-        with Store.in_memory() as store:
-            _hist(store, "1-A", [100, 102, 98, 101, 99, 30])  # last is a low outlier
-            anoms = detect_anomalies(store)
-            assert any(a.kind is AnomalyKind.MEAN_REVERSION for a in anoms)
 
     def test_stale_median_vs_live_lowest(self) -> None:
         with Store.in_memory() as store:
