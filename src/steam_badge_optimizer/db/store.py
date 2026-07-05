@@ -146,6 +146,39 @@ class Store:
         )
         self.conn.commit()
 
+    def replace_cards_for_app(self, appid: int, cards: list[Card]) -> None:
+        """Atomically replace the known card set for an app (delete-then-insert).
+
+        Card discovery is authoritative for the full card list, so it replaces rather
+        than accumulates — otherwise stale rows from an earlier/partial run could mix
+        with a new run and wrongly satisfy the set size.
+        """
+        self.conn.execute("BEGIN")
+        try:
+            self.conn.execute("DELETE FROM card WHERE appid = ?", (appid,))
+            self.conn.executemany(
+                """
+                INSERT INTO card
+                    (appid, market_hash_name, card_name, is_foil, marketable, tradable)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        c.appid,
+                        c.market_hash_name,
+                        c.card_name,
+                        int(c.is_foil),
+                        int(c.marketable),
+                        int(c.tradable),
+                    )
+                    for c in cards
+                ],
+            )
+            self.conn.execute("COMMIT")
+        except Exception:
+            self.conn.execute("ROLLBACK")
+            raise
+
     # --- user state (current-state upserts) --------------------------------
 
     def upsert_inventory(self, inv: UserCardInventory) -> None:
