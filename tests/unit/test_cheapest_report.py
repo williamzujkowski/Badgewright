@@ -45,6 +45,12 @@ class TestBuildRows:
         assert rows[0].buyable == "thin"
         assert rows[0].game == "App 1"  # fallback when name unknown
 
+    def test_no_bottleneck_gives_empty_pct(self) -> None:
+        from dataclasses import replace
+
+        b = replace(_badge(1, 10), bottleneck_fraction=None)
+        assert build_cheapest_rows([b], {}, currency="USD", now=NOW)[0].bottleneck_pct == ""
+
 
 class TestCsvExport:
     def test_writes_columns_and_rows(self, tmp_path) -> None:
@@ -63,6 +69,32 @@ class TestCsvExport:
         write_cheapest([_badge(1, 10)], {1: "=cmd|'/c calc'!A1"}, p, currency="USD", now=NOW)
         text = p.read_text()
         assert "'=cmd" in text  # neutralized, not a live formula
+
+    def test_notes_cell_is_neutralized(self, tmp_path) -> None:
+        # signals (notes) are Steam-derived text too — must be formula-neutralized.
+        p = tmp_path / "notes.csv"
+        write_cheapest(
+            [_badge(1, 10, signals=["=HYPERLINK(evil)"])], {}, p, currency="USD", now=NOW
+        )
+        with p.open() as fh:
+            row = next(csv.DictReader(fh))
+        assert row["notes"].startswith("'=")  # neutralized
+
+    def test_leading_whitespace_formula_neutralized(self, tmp_path) -> None:
+        p = tmp_path / "ws.csv"
+        write_cheapest([_badge(1, 10)], {1: "\t=cmd"}, p, currency="USD", now=NOW)
+        with p.open() as fh:
+            row = next(csv.DictReader(fh))
+        assert row["game"].startswith("'")  # tab-then-= still neutralized
+
+    def test_delimiter_chars_stay_in_one_cell(self, tmp_path) -> None:
+        # A game name with a comma/quote/newline must not break the column layout.
+        p = tmp_path / "delim.csv"
+        write_cheapest([_badge(7, 10)], {7: 'A, "B"\nC'}, p, currency="USD", now=NOW)
+        with p.open() as fh:
+            rows = list(csv.DictReader(fh))
+        assert len(rows) == 1 and rows[0]["appid"] == "7"  # no column/row breakout
+        assert rows[0]["game"] == 'A, "B"\nC'
 
 
 class TestHtmlExport:
@@ -85,6 +117,21 @@ class TestHtmlExport:
         assert "<script>" not in doc  # escaped
         assert "&lt;script&gt;" in doc
         assert_inert_html(doc)  # still provably inert
+
+    def test_escapes_malicious_notes(self) -> None:
+        # signals (notes) render into HTML too and must be escaped + inert.
+        doc = render_cheapest_html(
+            build_cheapest_rows(
+                [_badge(1, 10, signals=["<img src=x onerror=alert(1)>"])],
+                {},
+                currency="USD",
+                now=NOW,
+            ),
+            currency="USD",
+        )
+        assert "<img" not in doc  # the tag is escaped to &lt;img (inert text, no live handler)
+        assert "&lt;img" in doc
+        assert_inert_html(doc)  # provably inert
 
     def test_game_name_with_scheme_like_text_stays_inert(self) -> None:
         # "Portal: data" as escaped text (not a link) must not trip the URL-scheme check.

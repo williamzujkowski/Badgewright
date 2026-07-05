@@ -121,7 +121,11 @@ def render_cheapest_html(rows: list[CheapestBadgeRow], *, currency: str) -> str:
             )
         body.append("</tbody></table>")
     body.append("</body></html>")
-    return "\n".join(body)
+    document = "\n".join(body)
+    # Self-assert inertness: this is a public API, so a caller that writes the returned
+    # string directly (not via write_cheapest) still gets the fail-closed guarantee.
+    assert_inert_html(document)
+    return document
 
 
 def write_cheapest(
