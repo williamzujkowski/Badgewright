@@ -25,3 +25,4 @@ badgewright.sqlite3
 .vscode/
 .idea/
 .DS_Store
+.nexus-agents/
