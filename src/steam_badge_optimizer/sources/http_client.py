@@ -181,7 +181,9 @@ class SafeClient:
                 if resp.status_code >= 400:
                     raise HTTPStatusError(resp.status_code, safe_url)
                 content = self._read_capped(resp, max_bytes, request_url)
-                status, final_url = resp.status_code, str(resp.url)
+                # Redact the exposed URL too — it may carry a secret query param, and a
+                # caller could log SafeResponse.url. (Redirects are refused, so final==request.)
+                status, final_url = resp.status_code, redact_url(resp.url)
         finally:
             # Never retain cookies between requests — defense in depth.
             self._client.cookies.clear()

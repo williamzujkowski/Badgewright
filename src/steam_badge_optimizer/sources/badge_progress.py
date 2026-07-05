@@ -96,15 +96,26 @@ def parse_badges_response(raw: bytes) -> list[UserBadgeProgress]:
         if not isinstance(badge, dict):
             continue
         appid = badge.get("appid")
-        level = badge.get("level")
-        if not isinstance(appid, int) or appid <= 0 or not isinstance(level, int):
-            continue  # community badge (no appid) or malformed
-        if badge.get("border_color") == 1:
+        if not isinstance(appid, int) or appid <= 0:
+            continue  # community badge (no appid)
+        # A trading-card badge always carries a card border (0=normal, 1=foil). A
+        # game-specific EVENT/special badge lacks it — importing its level would
+        # overwrite the real card level and silently drop the game from the plan. So we
+        # require border_color to be present: skip anything without one.
+        border = badge.get("border_color")
+        if border is None:
+            continue  # not a trading-card badge
+        if str(border) == "1":
             continue  # foil badge — out of scope
+        level = badge.get("level")
+        if isinstance(level, float) and level.is_integer():
+            level = int(level)
+        if not isinstance(level, int) or isinstance(level, bool):
+            continue  # malformed level
         clamped = max(0, min(level, MAX_NORMAL_BADGE_LEVEL))
-        # Keep the highest level seen per app (defensive against duplicates).
-        existing = out.get(appid)
-        if existing is None or clamped > existing.level:
+        # Exactly one normal card badge per appid; keep the first (a duplicate would be
+        # a data anomaly, and "keep highest" wrongly favors an event badge's level).
+        if appid not in out:
             out[appid] = UserBadgeProgress(appid=appid, level=clamped, is_foil=False)
     return list(out.values())
 

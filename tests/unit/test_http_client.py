@@ -70,6 +70,25 @@ class TestRedaction:
         assert "TOPSECRET" not in str(exc.value)
         assert "REDACTED" in str(exc.value)
 
+    @respx.mock
+    def test_transport_error_redacts_key(self) -> None:
+        # Even if httpx's own message echoed the key-bearing URL, it must be masked.
+        url = "https://api.steampowered.com/IPlayerService/GetBadges/v1/"
+        respx.get(url).mock(
+            side_effect=httpx.ConnectError(f"failed connecting to {url}?key=TOPSECRET")
+        )
+        with _client(max_attempts=1) as c, pytest.raises(FetchError) as exc:
+            c.get(url, params={"key": "TOPSECRET", "steamid": "1"})
+        assert "TOPSECRET" not in str(exc.value)
+
+    @respx.mock
+    def test_response_url_is_redacted(self) -> None:
+        url = "https://api.steampowered.com/IPlayerService/GetBadges/v1/"
+        respx.get(url).mock(return_value=httpx.Response(200, content=b"{}"))
+        with _client() as c:
+            resp = c.get(url, params={"key": "TOPSECRET", "steamid": "1"})
+        assert "TOPSECRET" not in resp.url  # exposed URL never carries the key
+
 
 class TestFetch:
     @respx.mock

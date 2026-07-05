@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import httpx
+import orjson
 import pytest
 import respx
 
@@ -29,6 +30,23 @@ class TestParse:
 
     def test_no_badges_is_empty(self) -> None:
         assert bp.parse_badges_response(b'{"response": {}}') == []
+
+    def test_event_badge_does_not_override_card_level(self) -> None:
+        # The fixture has a same-appid event badge (appid 220, no border_color, level 5).
+        # It must NOT overwrite the real card badge (level 3).
+        rows = {r.appid: r.level for r in bp.parse_badges_response(FIXTURE.read_bytes())}
+        assert rows[220] == 3
+
+    def test_badge_without_border_color_skipped(self) -> None:
+        # No border_color => not a trading-card badge (event/special) => not imported.
+        raw = orjson.dumps({"response": {"badges": [{"appid": 999, "badgeid": 7, "level": 4}]}})
+        assert bp.parse_badges_response(raw) == []
+
+    def test_foil_border_as_string_still_skipped(self) -> None:
+        raw = orjson.dumps(
+            {"response": {"badges": [{"appid": 1, "border_color": "1", "level": 1}]}}
+        )
+        assert bp.parse_badges_response(raw) == []
 
     @pytest.mark.parametrize("bad", [b"not json", b"[1]", b'{"response": []}'])
     def test_bad_envelope_raises(self, bad: bytes) -> None:
