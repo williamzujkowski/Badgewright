@@ -51,6 +51,14 @@ class TestAccountXp:
         assert account_xp_between(50, 50) == 0
         assert account_xp_between(50, 40) == 0
 
+    def test_band_crossing(self) -> None:
+        # 8->9,10 cost 100 each (=200); 11,12 cost 200 each (=400). Total 8->12 = 600.
+        assert account_xp_between(8, 12) == 600
+
+    def test_single_mid_band_level(self) -> None:
+        # Reaching level 25 costs 100*ceil(25/10) = 300.
+        assert account_xp_between(24, 25) == 300
+
 
 class TestGreedy:
     def test_ranks_cheapest_cost_per_xp_first(self) -> None:

@@ -99,6 +99,8 @@ def compute_costs(
     only normal cards and normal badge progress are considered — foil support lands as
     its own feature.
     """
+    if not (0 <= target_level <= MAX_NORMAL_BADGE_LEVEL):
+        raise ValueError(f"target_level must be 0..{MAX_NORMAL_BADGE_LEVEL}, got {target_level}")
     badges: list[BadgeCost] = []
     for badge_set in store.list_badge_sets():
         appid = badge_set.appid
