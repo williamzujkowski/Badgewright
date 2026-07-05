@@ -77,9 +77,20 @@ class TestForbiddenRouteTripwire:
             "https://steamcommunity.com/market/cancelbuyorder/",
             "https://steamcommunity.com/market/removelisting/12345",
             "https://steamcommunity.com/tradeoffer/ajaxcraftbadge/",
+            "https://steamcommunity.com/tradeoffer/new/?partner=1",
+            "https://steamcommunity.com/trade/1234",
         ],
     )
     def test_action_routes_refused_even_on_get(self, url: str) -> None:
         # Belt-and-suspenders: even a GET to a known action route fails closed.
         with pytest.raises(SafetyViolationError):
             assert_safe_request("GET", url)
+
+    def test_card_name_containing_trade_does_not_false_positive(self) -> None:
+        # A legitimate price fetch for a card named "Trade Federation" must not be
+        # blocked by the trade tripwire (the fragment is path-anchored).
+        assert_safe_request(
+            "GET",
+            "https://steamcommunity.com/market/priceoverview/"
+            "?appid=753&market_hash_name=Trade+Federation",
+        )
