@@ -94,6 +94,25 @@ class TestInertHtml:
         assert "<script>alert(1)</script>" not in doc
         assert "&lt;script&gt;" in doc
 
+    def test_colon_scheme_lookalike_name_still_renders(self, tmp_path) -> None:
+        # Steam titles commonly contain colons; a name that merely contains "steam:" or
+        # "data:" as plain text must NOT fail the inert check (it's escaped text, not a link).
+        with Store.in_memory() as store:
+            _seed(store, card_name="Data: Recovery", game="Portal 2: steam:cake")
+            write_html(_plan(store), store, tmp_path / "p.html")  # must not raise
+            doc = (tmp_path / "p.html").read_text()
+        assert_inert_html(doc)
+        assert "Portal 2: steam:cake".replace(":", "") in doc.replace(":", "")
+
+    def test_attacker_quote_in_href_context_is_safe(self) -> None:
+        # A card name with a double-quote can't break out of the href attribute:
+        # listings_url() urllib-quotes it and html.escape(quote=True) escapes it.
+        with Store.in_memory() as store:
+            _seed(store, card_name='" onmouseover="alert(1)')
+            doc = render_html(_plan(store), store)
+        assert_inert_html(doc)
+        assert 'onmouseover="alert(1)"' not in doc
+
     @pytest.mark.parametrize(
         "bad",
         [

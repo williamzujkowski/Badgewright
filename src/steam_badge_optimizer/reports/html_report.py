@@ -32,7 +32,8 @@ _CSP = (
 _SCRIPT_RE = re.compile(r"<\s*script", re.IGNORECASE)
 _HANDLER_RE = re.compile(r"<[^>]*\son\w+\s*=", re.IGNORECASE)
 _BAD_SCHEME_RE = re.compile(r"(javascript|vbscript|data|steam)\s*:", re.IGNORECASE)
-_HREF_RE = re.compile(r'href\s*=\s*"([^"]*)"', re.IGNORECASE)
+# Matches href/src attribute values only (not text nodes).
+_URL_ATTR_RE = re.compile(r'\b(href|src)\s*=\s*"([^"]*)"', re.IGNORECASE)
 
 
 class InertHtmlError(RuntimeError):
@@ -45,17 +46,20 @@ def assert_inert_html(document: str) -> None:
         raise InertHtmlError("document contains a <script> tag")
     if _HANDLER_RE.search(document):
         raise InertHtmlError("document contains an inline event handler (on*=)")
-    if _BAD_SCHEME_RE.search(document):
-        raise InertHtmlError("document contains an active/forbidden URL scheme")
     if "Content-Security-Policy" not in document:
         raise InertHtmlError("document is missing its Content-Security-Policy meta")
-    for match in _HREF_RE.finditer(document):
-        url = match.group(1)
-        if not (url.startswith(("https://", "http://", "#"))):
-            raise InertHtmlError(f"non-http(s) href: {url!r}")
+    # Check URL schemes only inside href/src *attribute values*, never in text nodes:
+    # an escaped card/game name that merely contains "steam:"/"data:" (e.g. the game
+    # title "Portal 2: …") is inert text, not a link, and must not fail the report.
+    for match in _URL_ATTR_RE.finditer(document):
+        url = match.group(2)
+        if _BAD_SCHEME_RE.search(url):
+            raise InertHtmlError(f"active/forbidden URL scheme in link: {url!r}")
+        if not url.startswith(("https://", "http://", "#")):
+            raise InertHtmlError(f"non-http(s) URL attribute: {url!r}")
         lowered = url.lower()
         if any(fragment in lowered for fragment in FORBIDDEN_PATH_FRAGMENTS):
-            raise InertHtmlError(f"href names a forbidden market-action route: {url!r}")
+            raise InertHtmlError(f"URL names a forbidden market-action route: {url!r}")
 
 
 def _row_html(row: PlanRow) -> str:
