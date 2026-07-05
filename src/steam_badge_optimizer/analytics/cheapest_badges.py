@@ -71,20 +71,27 @@ def rank_cheapest_badges(
             continue  # not fully known — can't cost the whole set
 
         unit_cents: list[int] = []
-        liquidity: list[int | None] = []
+        card_liquidity: list[tuple[int | None, int | None]] = []  # (asks, volume) per card
         complete = True
         for card in cards:
-            snap = store.latest_price(appid, card.market_hash_name)
-            if snap is None:
+            hist = store.price_history(appid, card.market_hash_name)
+            if not hist:
                 complete = False
                 break
-            unit = snap.lowest or snap.median
-            if unit is None or unit.currency != currency:
+            latest = hist[-1]
+            # Cost basis is the CURRENT lowest ask ONLY — never the median. A median is a
+            # past sale that can sit below the lowest ask (or exist with no ask at all), so
+            # using it would present a price a buyer cannot fill. No current ask => unbuyable.
+            if latest.lowest is None or latest.lowest.currency != currency:
                 complete = False
                 break
-            unit_cents.append(unit.cents)
-            # Prefer ask-side depth (listings); fall back to 24h volume as a proxy.
-            liquidity.append(snap.listings if snap.listings is not None else snap.volume)
+            unit_cents.append(latest.lowest.cents)
+            # Liquidity is buyability: the most recent ASK count (from any snapshot — search
+            # gives listings, priceoverview doesn't, so enrichment must not lose it), with
+            # 24h volume as a secondary signal. A card is buyable if EITHER is adequate.
+            asks = next((s.listings for s in reversed(hist) if s.listings is not None), None)
+            vol = next((s.volume for s in reversed(hist) if s.volume is not None), None)
+            card_liquidity.append((asks, vol))
         if not complete or not unit_cents:
             continue
 
@@ -95,16 +102,26 @@ def rank_cheapest_badges(
                 f"market has {len(cards)} cards; catalog says {badge_set.set_size} "
                 "(costing all market cards)"
             )
-        known_liq = [x for x in liquidity if x is not None]
-        min_liq = min(known_liq) if known_liq else None
-        any_unknown = any(x is None for x in liquidity)
-        # A set is liquid only if EVERY card is known-and-liquid — a card with no depth
-        # data is unbuyable-until-proven, so it must NOT be silently excluded from the gate.
-        liquid = not any_unknown and all(x >= min_listings for x in known_liq)
+
+        def _known(pair: tuple[int | None, int | None]) -> bool:
+            return pair[0] is not None or pair[1] is not None
+
+        def _buyable(pair: tuple[int | None, int | None]) -> bool:
+            asks, vol = pair
+            return (asks is not None and asks >= min_listings) or (
+                vol is not None and vol >= min_listings
+            )
+
+        known_signals = [v for pair in card_liquidity for v in pair if v is not None]
+        min_liq = min(known_signals) if known_signals else None
+        any_unknown = any(not _known(p) for p in card_liquidity)
+        # Liquid only if EVERY card is known-and-buyable (a card with no depth data at all is
+        # unbuyable-until-proven and must not be silently excluded).
+        liquid = not any_unknown and all(_buyable(p) for p in card_liquidity)
         if any_unknown:
             signals.append("liquidity unknown for a card — can't confirm it's buyable")
         elif not liquid:
-            signals.append(f"thin: a card has only {min_liq} listing(s) (< {min_listings}) — risky")
+            signals.append(f"thin: a card has only {min_liq} listing(s)/sale(s) (< {min_listings})")
 
         bottleneck = max(unit_cents) / total if total > 0 else None
         if bottleneck is not None and bottleneck >= DOMINANCE_FLAG:

@@ -6,6 +6,23 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Top-K liquidity enrichment** for `sbo market cheapest-badges` (Epic #71 #74, reshaped):
+  `--enrich-top K` (opt-in; needs `--online` + `--confirm`) re-prices the top K candidates
+  via priceoverview to confirm liquidity with **real 24h volume** — so a badge that looks
+  cheap-and-liquid on stale search listings but has ~0 actual volume is correctly demoted.
+  Bounded to those candidates, rate-polite, hard-stops on rate-limit; the cost basis stays
+  the current lowest ask (enrichment never presents a price a buyer couldn't fill).
+
+### Note
+
+- Real order-book depth via `itemordershistogram` (#4.5, and the histogram half of #74) is
+  **infeasible** for this read-only tool: Steam moved the market listing page to SSR JS
+  bundles, so a card's `item_nameid` is no longer in the static HTML (would need browser JS
+  execution, outside the no-automation boundary). See #86. Liquidity signals remain the
+  conservative order-book proxy + priceoverview volume + search listings.
+
 ## [0.9.0] - 2026-07-05
 
 Data-layer correctness: the live market is now authoritative for how many cards a badge

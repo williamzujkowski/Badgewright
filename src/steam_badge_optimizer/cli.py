@@ -11,7 +11,13 @@ Nothing in this CLI can operate a Steam account — see :mod:`steam_badge_optimi
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import typer
+
+if TYPE_CHECKING:
+    from .analytics import BadgeSetCost
+    from .db import Store
 
 from . import __version__
 from .config import (
@@ -655,20 +661,44 @@ def market_anomalies(
 def market_cheapest_badges(
     top: int = typer.Option(20, help="Number of results."),
     min_listings: int = typer.Option(2, help="Min asks per card to count a set as liquid."),
+    enrich_top: int = typer.Option(
+        0, help="Re-price this many top candidates via priceoverview for real 24h volume."
+    ),
+    online: bool = typer.Option(False, help="Allow network (required with --confirm to enrich)."),
+    confirm: bool = typer.Option(False, "--confirm", help="Acknowledge the enrichment fetch."),
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Rank the cheapest badges to make from scratch, from cached prices. Never trades."""
+    """Rank the cheapest badges to make from scratch, from cached prices. Never trades.
+
+    ``--enrich-top K`` (opt-in, needs --online + --confirm) re-prices the top K candidates
+    via priceoverview to confirm liquidity with real 24h volume — bounded and rate-polite.
+    """
     from .analytics import rank_cheapest_badges
     from .db import Store
 
     if top <= 0:
         typer.secho("--top must be positive.", fg=typer.colors.RED)
         raise typer.Exit(code=2)
+    if enrich_top < 0:
+        typer.secho("--enrich-top must be >= 0.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if enrich_top > 0 and not (online and confirm):
+        typer.secho(
+            "--enrich-top fetches from Steam, so it needs BOTH --online and --confirm.",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=2)
+
     settings = Settings.resolve(data_dir=data_dir, currency=None)
     with Store(settings.db_path) as store:
         ranked = rank_cheapest_badges(
             store, currency=settings.currency, min_listings=min_listings, top=top
         )
+        if enrich_top > 0 and ranked:
+            _enrich_candidates(store, ranked[:enrich_top], settings)
+            ranked = rank_cheapest_badges(
+                store, currency=settings.currency, min_listings=min_listings, top=top
+            )
         names = {a.appid: a.name for a in store.list_apps()}
     if not ranked:
         typer.echo(
@@ -688,6 +718,33 @@ def market_cheapest_badges(
 
 
 SWEEP_MIN_INTERVAL_S = 4.5  # polite floor for the bulk sweep (~1 req / 4-5s) — never faster
+
+
+def _enrich_candidates(store: Store, badges: list[BadgeSetCost], settings: Settings) -> None:
+    """Re-price the given badges' cards via priceoverview to add real 24h volume/median.
+
+    Bounded (only these badges' cards), rate-polite, hard-stops on rate-limit. The cost
+    basis stays the current lowest ask — enrichment only adds a truer liquidity signal
+    (volume) and never presents a price a buyer couldn't fill.
+    """
+    from .models import MarketItem
+    from .sources.http_client import RateLimited, SafeClient
+    from .sources.steam_market import refresh_prices
+
+    items = [
+        MarketItem(appid=b.appid, market_hash_name=card.market_hash_name)
+        for b in badges
+        for card in store.cards_for_app(b.appid, include_foil=False)
+    ]
+    if not items:
+        return
+    interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+    typer.echo(f"Enriching {len(badges)} candidate(s) with 24h volume via priceoverview...")
+    with SafeClient(min_interval_s=interval) as client:
+        try:
+            refresh_prices(store, client, items, settings.currency, force=True)
+        except RateLimited:
+            typer.secho("Steam rate-limited the enrichment; showing what we have.", fg="yellow")
 
 
 @market_app.command("sweep")
