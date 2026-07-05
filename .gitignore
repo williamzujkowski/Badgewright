@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Badgewright local user data — NEVER commit a user's Steam data or cached pages.
+# Anchored to the repo root so they don't shadow the src/.../reports package.
+*.sqlite3
+*.sqlite3-journal
+/data/
+/reports/
+/exports/
+badgewright.sqlite3
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

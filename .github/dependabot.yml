@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned to current, non-deprecated majors.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Keep Python dependencies current.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-deps:
+        patterns: ["*"]

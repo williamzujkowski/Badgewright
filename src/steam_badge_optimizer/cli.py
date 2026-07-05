@@ -1,0 +1,147 @@
+"""Badgewright command-line interface.
+
+The command surface mirrors the plan's sketch (``sbo init``, ``catalog import``,
+``inventory import``, ``optimize``, ``report``, ``market ...``). Only the pieces
+implemented in the current milestone do real work; the rest are registered stubs
+that fail loudly with the milestone they belong to, so the wiring is complete and
+discoverable (``--help`` lists everything) without pretending to be finished.
+
+Nothing in this CLI can operate a Steam account — see :mod:`steam_badge_optimizer.safety`.
+"""
+
+from __future__ import annotations
+
+import typer
+
+from . import __version__
+from .config import (
+    MAX_NORMAL_BADGE_LEVEL,
+    STEAM_CARDS_CONTEXTID,
+    STEAM_COMMUNITY_APPID,
+    XP_PER_BADGE_LEVEL,
+    Settings,
+)
+from .safety import ALLOWED_HOSTS, ALLOWED_METHODS
+
+app = typer.Typer(
+    name="steam-badge-optimizer",
+    help="Badgewright: a local, read-only Steam badge optimizer. It plans; it never automates.",
+    no_args_is_help=True,
+    add_completion=False,
+)
+catalog_app = typer.Typer(help="Import and inspect the trading-card catalog.")
+inventory_app = typer.Typer(help="Import your card inventory (file or public read).")
+badges_app = typer.Typer(help="Import your badge progress.")
+prices_app = typer.Typer(help="Refresh cached market prices (network is opt-in).")
+report_app = typer.Typer(help="Export purchase plans (CSV / HTML).")
+market_app = typer.Typer(help="Market-intelligence research (never trades).")
+app.add_typer(catalog_app, name="catalog")
+app.add_typer(inventory_app, name="inventory")
+app.add_typer(badges_app, name="badges")
+app.add_typer(prices_app, name="prices")
+app.add_typer(report_app, name="report")
+app.add_typer(market_app, name="market")
+
+
+def _not_yet(feature: str, milestone: str) -> None:
+    typer.secho(
+        f"'{feature}' is not implemented yet (planned for {milestone}).",
+        fg=typer.colors.YELLOW,
+    )
+    raise typer.Exit(code=2)
+
+
+@app.command()
+def version() -> None:
+    """Print the Badgewright version."""
+    typer.echo(f"steam-badge-optimizer {__version__}")
+
+
+@app.command("safety")
+def safety_boundary() -> None:
+    """Print the read-only safety boundary this tool enforces."""
+    typer.secho("Badgewright is a local analytics & planning tool.", bold=True)
+    typer.echo("It does NOT buy, sell, trade, craft, list, idle, or automate any Steam action.")
+    typer.echo(f"  Permitted HTTP methods : {', '.join(sorted(ALLOWED_METHODS))}")
+    typer.echo(f"  Read-only hosts        : {', '.join(sorted(ALLOWED_HOSTS))}")
+    typer.echo("  See docs/adr/0001-safety-boundary.md for the full rationale.")
+
+
+@app.command()
+def init(
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Create the local data directory (default storage is local SQLite)."""
+    settings = Settings.resolve(data_dir=data_dir)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    typer.secho(
+        f"Initialized Badgewright data directory: {settings.data_dir}", fg=typer.colors.GREEN
+    )
+    typer.echo(f"  Database (created on first import): {settings.db_path}")
+    typer.echo(
+        f"  Community appid/context for cards : {STEAM_COMMUNITY_APPID}/{STEAM_CARDS_CONTEXTID}"
+    )
+    typer.echo(
+        f"  XP per badge level / max level    : {XP_PER_BADGE_LEVEL} / {MAX_NORMAL_BADGE_LEVEL}"
+    )
+
+
+@catalog_app.command("import")
+def catalog_import(
+    source: str = typer.Option("steam-badges-db", help="Catalog source name."),
+) -> None:
+    """Import the public card-set catalog (appid, name, set size)."""
+    _not_yet("catalog import", "Milestone 2")
+
+
+@inventory_app.command("import")
+def inventory_import(
+    file: str = typer.Option(..., help="Path to an exported inventory JSON."),
+) -> None:
+    """Import a card inventory from a file (appid 753 / context 6 cards)."""
+    _not_yet("inventory import", "Milestone 2")
+
+
+@badges_app.command("import")
+def badges_import(file: str = typer.Option(..., help="Path to exported badge progress.")) -> None:
+    """Import badge progress (level 0-5 per game, foil status)."""
+    _not_yet("badges import", "Milestone 2")
+
+
+@prices_app.command("refresh")
+def prices_refresh(
+    limit: int = typer.Option(100, help="Max items to refresh."),
+    cache_ttl: str = typer.Option("24h", help="How long cached prices stay fresh."),
+) -> None:
+    """Refresh cached prices for known missing cards (rate-limited, opt-in network)."""
+    _not_yet("prices refresh", "Milestone 3")
+
+
+@app.command()
+def optimize(
+    budget: float | None = typer.Option(None, help="Spend cap for the plan."),
+    current_level: int | None = typer.Option(None, help="Your current Steam level."),
+    target_level: int | None = typer.Option(None, help="Desired Steam level."),
+    exclude_foil: bool = typer.Option(True, help="Exclude foil badges (thin markets)."),
+) -> None:
+    """Compute the cheapest badge-completion plan (greedy; provably optimal for uniform XP)."""
+    _not_yet("optimize", "Milestone 4")
+
+
+@report_app.command("purchase-plan")
+def report_purchase_plan(
+    fmt: str = typer.Option("html", "--format", help="Output format: html or csv."),
+    out: str = typer.Option(..., help="Output file path."),
+) -> None:
+    """Export the purchase plan for manual review (inert; no scripts, no actions)."""
+    _not_yet("report purchase-plan", "Milestone 4")
+
+
+@market_app.command("scan-weakness")
+def market_scan_weakness(top: int = typer.Option(50, help="Number of results.")) -> None:
+    """Research: rank cards by price-weakness signals. Never trades."""
+    _not_yet("market scan-weakness", "Milestone 5")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    app()
