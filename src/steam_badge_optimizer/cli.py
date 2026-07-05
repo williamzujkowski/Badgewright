@@ -172,10 +172,47 @@ def catalog_list(
 
 @inventory_app.command("import")
 def inventory_import(
-    file: str = typer.Option(..., help="Path to an exported inventory JSON."),
+    file: str | None = typer.Option(None, help="Path to an exported inventory JSON (offline)."),
+    steamid: str | None = typer.Option(None, help="SteamID64 / URL / vanity (needs --online)."),
+    online: bool = typer.Option(False, help="Allow a network fetch of a public inventory."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Import a card inventory from a file (appid 753 / context 6 cards)."""
-    _not_yet("inventory import", "Milestone 2")
+    """Import your trading-card inventory (appid 753 / context 6)."""
+    from .db import Store
+    from .sources import steam_inventory as si
+    from .sources.http_client import SafeClient
+    from .sources.steamid import SteamIdError, resolve_steamid
+
+    settings = Settings.resolve(data_dir=data_dir)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        try:
+            if file:
+                result = si.import_from_file(store, file)
+            elif steamid and online:
+                with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+                    id64 = resolve_steamid(steamid, client)
+                    result = si.import_inventory(store, client, id64)
+            elif steamid and not online:
+                typer.secho("Fetching an inventory needs --online.", fg=typer.colors.YELLOW)
+                raise typer.Exit(code=2)
+            else:
+                typer.secho(
+                    "Provide --file <inventory.json>, or --steamid <id> --online.",
+                    fg=typer.colors.YELLOW,
+                )
+                raise typer.Exit(code=2)
+        except si.PrivateInventoryError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+        except (si.InventoryParseError, SteamIdError) as exc:
+            typer.secho(f"Import failed: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(code=1) from exc
+    typer.secho(
+        f"Imported {len(result.cards)} cards ({result.skipped} skipped of "
+        f"{result.total_assets} assets) into {settings.db_path}.",
+        fg=typer.colors.GREEN,
+    )
 
 
 @badges_app.command("import")
