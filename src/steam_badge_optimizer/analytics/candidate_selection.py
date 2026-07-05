@@ -8,13 +8,14 @@ badge if we spend a little request budget finishing their sets, so a bounded tar
 Selection avoids the obvious bias — a game can look cheap because the ONE card we happened
 to price is cheap while the rest of the set is expensive. So a candidate is ranked by its
 ESTIMATED cost to COMPLETE the whole set: the sum of the cards we've already priced plus a
-conservative median-of-known-prices proxy for each still-unpriced slot. Ranking by that
-(ascending, appid tie-break) is a best-effort estimate over the partial sample we have.
+**conservative (75th-percentile) proxy** for each still-unpriced slot. Charging unpriced
+slots a pessimistic price means a game where we've verified MANY cards are cheap estimates
+lower than one where a single cheap card hides an unknown (possibly expensive) remainder —
+so evidence is rewarded and thin single-card gambles sink. Best-effort over a partial sample.
 """
 
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -65,7 +66,10 @@ def select_candidate_games(
 
     if not games:
         return []
-    proxy = int(statistics.median(all_known))  # a typical cheap-card price for unpriced slots
+    # Conservative proxy for unpriced slots: the 75th percentile of known prices. Pricier
+    # than the median, so a game must have EVIDENCE (many priced-cheap cards) to estimate
+    # low — a lone cheap card can't make the whole set look cheap.
+    proxy = _p75(all_known)
     out = [
         CandidateGame(
             appid=appid,
@@ -78,3 +82,10 @@ def select_candidate_games(
     ]
     out.sort(key=lambda c: (c.est_completion_cents, c.appid))
     return out[:max_games]
+
+
+def _p75(values: list[int]) -> int:
+    """75th-percentile (nearest-rank) of a non-empty list of ints."""
+    ordered = sorted(values)
+    idx = min(len(ordered) - 1, int(0.75 * (len(ordered) - 1) + 0.5))
+    return ordered[idx]

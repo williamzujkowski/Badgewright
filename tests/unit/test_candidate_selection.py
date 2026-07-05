@@ -68,6 +68,18 @@ class TestSelectCandidates:
             assert cands[200].est_completion_cents == 1 + 4 * 2  # == 9, NOT 5 (1c * 5)
             assert cands[100].est_completion_cents == 8 + 1 * 2  # == 10
 
+    def test_rewards_evidence_over_single_cheap_card(self) -> None:
+        # A and B both have only cheap known cards (1c), but A has verified MORE of its set.
+        # With a conservative p75 proxy for unpriced slots, A (more evidence) must rank first —
+        # a lone cheap card shouldn't tie a well-evidenced cheap set.
+        with Store.in_memory() as store:
+            _partial(store, 1, 5, [1, 1, 1])  # A: 3/5 cheap (strong evidence)
+            _partial(store, 2, 5, [1])  # B: 1/5 cheap (a gamble)
+            _partial(store, 3, 5, [50, 60, 70])  # C: expensive -> raises the p75 proxy
+            ranked = select_candidate_games(store)
+            order = [c.appid for c in ranked]
+            assert order.index(1) < order.index(2)  # A before B (evidence wins)
+
     def test_ranks_by_estimated_completion_cost(self) -> None:
         with Store.in_memory() as store:
             _partial(store, 100, 2, [50])  # est 50 + 1*median
