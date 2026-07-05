@@ -85,6 +85,37 @@ class TestFetch:
         assert respx.calls.call_count == 2
 
     @respx.mock
+    def test_redirect_is_not_followed(self) -> None:
+        # A 3xx would escape the guard, so it must surface as an error, never chased.
+        respx.get(ALLOWED).mock(
+            return_value=httpx.Response(302, headers={"Location": "https://evil.example.com/"})
+        )
+        with _client() as c, pytest.raises(FetchError):
+            c.get(ALLOWED)
+        assert respx.calls.call_count == 1  # not followed
+
+    def test_forbidden_fragment_in_params_blocked(self) -> None:
+        # A forbidden action route smuggled via query params is caught before I/O.
+        with respx.mock, _client() as c:
+            with pytest.raises(SafetyViolationError):
+                c.get("https://steamcommunity.com/market/", params={"x": "sellitem"})
+            assert respx.calls.call_count == 0
+
+    @respx.mock
+    def test_oversized_response_capped_midstream(self) -> None:
+        respx.get(ALLOWED).mock(return_value=httpx.Response(200, content=b"x" * 5000))
+        with _client() as c, pytest.raises(FetchError):
+            c.get(ALLOWED, max_bytes=1000)
+
+    def test_credentialed_host_resolves_to_steam(self) -> None:
+        # Documents that userinfo before an allowed host stays on the allowed host
+        # (last-@ wins in both the guard and httpx) — not a bypass.
+        from steam_badge_optimizer.safety import is_host_allowed
+
+        assert is_host_allowed("steamcommunity.com") is True
+        assert is_host_allowed("evil.com") is False
+
+    @respx.mock
     def test_no_cookies_persisted(self) -> None:
         respx.get(ALLOWED).mock(
             return_value=httpx.Response(200, content=b"{}", headers={"Set-Cookie": "sid=secret"})

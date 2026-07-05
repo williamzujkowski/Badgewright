@@ -99,9 +99,11 @@ def _persist(store: Store, parsed: list[tuple[SteamApp, BadgeSet]], source: Sour
 
 def import_from_file(store: Store, path: str | Path) -> ImportResult:
     """Import the catalog from a local badges.json file."""
-    raw = Path(path).read_bytes()
-    if len(raw) > MAX_BYTES:
-        raise CatalogParseError(f"file exceeds size cap ({len(raw)} bytes)")
+    file_path = Path(path)
+    # Check size BEFORE reading so an oversized file can't OOM the process.
+    if file_path.stat().st_size > MAX_BYTES:
+        raise CatalogParseError(f"file exceeds size cap ({file_path.stat().st_size} bytes)")
+    raw = file_path.read_bytes()
     parsed, skipped = parse_badges_json(raw)
     source = SourceRecord(
         kind=SourceKind.STEAM_BADGES_DB,
@@ -119,7 +121,8 @@ def import_from_url(
     store: Store, client: SafeClient, url: str = DEFAULT_BADGES_URL
 ) -> ImportResult:
     """Import the catalog from its raw URL via the guarded client (read-only)."""
-    resp = client.get(url)
+    # max_bytes makes the cap load-bearing during download (not after a full read).
+    resp = client.get(url, max_bytes=MAX_BYTES)
     raw = resp.content
     parsed, skipped = parse_badges_json(raw)
     source = SourceRecord(

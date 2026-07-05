@@ -85,7 +85,9 @@ class SafeClient:
         self._retry_wait = (
             retry_wait if retry_wait is not None else wait_exponential_jitter(initial=0.5, max=8.0)
         )
-        # No cookie persistence, honest UA, follow redirects (still re-validated).
+        # No cookie persistence; honest UA. Redirects are REFUSED, not followed: a 3xx
+        # target would escape the guard that already validated the original URL, so we
+        # never chase one (a redirect is returned as-is and treated as a failed fetch).
         self._client = httpx.Client(
             timeout=timeout_s,
             headers={"User-Agent": user_agent},
@@ -106,12 +108,21 @@ class SafeClient:
     def close(self) -> None:
         self._client.close()
 
-    def get(self, url: str, params: dict[str, Any] | None = None) -> SafeResponse:
+    def get(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        max_bytes: int | None = None,
+    ) -> SafeResponse:
         """Perform a guarded GET. Raises SafetyViolationError before any network I/O
-        for a disallowed method/host/route; RateLimited on 429; FetchError otherwise."""
-        # Validate the fully-resolved URL (with query) up front, fail-closed.
-        resolved = str(httpx.URL(url, params=params)) if params else url
-        assert_safe_request("GET", resolved)
+        for a disallowed method/host/route; RateLimited on 429; FetchError otherwise.
+
+        The exact ``httpx.URL`` that is validated is the one fetched (validate==fetch).
+        ``max_bytes`` caps the streamed body so an oversized response cannot OOM the
+        process (the body is enforced during download, not after)."""
+        request_url = httpx.URL(url, params=params)
+        assert_safe_request("GET", str(request_url))
 
         retryer: Retrying = Retrying(
             stop=stop_after_attempt(self._max_attempts),
@@ -120,24 +131,40 @@ class SafeClient:
             reraise=True,
         )
         try:
-            return retryer(self._do_get, url, params)
+            return retryer(self._do_get, request_url, max_bytes)
         except httpx.TransportError as exc:  # exhausted retries
             raise FetchError(f"transport error fetching {url}: {exc}") from exc
 
-    def _do_get(self, url: str, params: dict[str, Any] | None) -> SafeResponse:
+    def _do_get(self, request_url: httpx.URL, max_bytes: int | None) -> SafeResponse:
         self._respect_min_interval()
         try:
-            resp = self._client.get(url, params=params)
+            with self._client.stream("GET", request_url) as resp:
+                if resp.status_code == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    raise RateLimited(str(request_url), float(retry_after) if retry_after else None)
+                # Redirects are refused, so a 3xx is an error, not an empty success.
+                if resp.status_code >= 300:
+                    raise FetchError(
+                        f"HTTP {resp.status_code} fetching {request_url} "
+                        "(redirects are not followed)"
+                    )
+                content = self._read_capped(resp, max_bytes, request_url)
+                status, final_url = resp.status_code, str(resp.url)
         finally:
             # Never retain cookies between requests — defense in depth.
             self._client.cookies.clear()
+        return SafeResponse(status, content, final_url)
 
-        if resp.status_code == 429:
-            retry_after = resp.headers.get("Retry-After")
-            raise RateLimited(url, float(retry_after) if retry_after else None)
-        if resp.status_code >= 400:
-            raise FetchError(f"HTTP {resp.status_code} fetching {url}")
-        return SafeResponse(resp.status_code, resp.content, str(resp.url))
+    @staticmethod
+    def _read_capped(resp: httpx.Response, max_bytes: int | None, url: httpx.URL) -> bytes:
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in resp.iter_bytes():
+            total += len(chunk)
+            if max_bytes is not None and total > max_bytes:
+                raise FetchError(f"response from {url} exceeded {max_bytes}-byte cap")
+            chunks.append(chunk)
+        return b"".join(chunks)
 
     def _respect_min_interval(self) -> None:
         if self._min_interval_s <= 0:
