@@ -34,12 +34,40 @@ FORBIDDEN_SECRET_NAMES = {
 
 class TestDeleteAll:
     def _seed(self, data_dir) -> None:
+        from datetime import UTC, datetime
+
         from steam_badge_optimizer.config import Settings
+        from steam_badge_optimizer.models import (
+            MarketItem,
+            Money,
+            PriceSnapshot,
+            SourceKind,
+            SourceRecord,
+            UserCardInventory,
+        )
 
         s = Settings.resolve(data_dir=str(data_dir))
         s.data_dir.mkdir(parents=True, exist_ok=True)
         with Store(s.db_path) as store:
             store.upsert_app(SteamApp(appid=440, name="Team Fortress 2"))
+            # Seed multiple data types so the completeness grep catches any of them.
+            store.upsert_inventory(
+                UserCardInventory(appid=440, market_hash_name="440-SecretCard", quantity=3)
+            )
+            store.add_price_snapshot(
+                PriceSnapshot(
+                    item=MarketItem(appid=440, market_hash_name="440-SecretCard"),
+                    lowest=Money(1234, "USD"),
+                    source=SourceRecord(
+                        kind=SourceKind.STEAM_MARKET,
+                        url="https://steamcommunity.com/market/priceoverview/",
+                        fetched_at=datetime.now(UTC),
+                        parser_version="1",
+                        raw_sha256=SourceRecord.sha256_of(b"x"),
+                        cache_ttl_seconds=86400,
+                    ),
+                )
+            )
 
     def test_deletes_db_and_leaves_no_data(self, tmp_path) -> None:
         from steam_badge_optimizer.config import Settings
@@ -52,10 +80,12 @@ class TestDeleteAll:
         # DB and every journal/WAL sidecar are gone.
         for suffix in ("", "-wal", "-shm", "-journal"):
             assert not (db.parent / f"{db.name}{suffix}").exists()
-        # No trace of the imported data survives anywhere in the data dir.
+        # No trace of ANY imported data type (app name, card, price) survives.
         for f in tmp_path.rglob("*"):
             if f.is_file():
-                assert b"Team Fortress 2" not in f.read_bytes()
+                blob = f.read_bytes()
+                assert b"Team Fortress 2" not in blob
+                assert b"440-SecretCard" not in blob
 
     def test_nothing_to_delete_is_graceful(self, tmp_path) -> None:
         result = runner.invoke(app, ["delete-all", "--yes", "--data-dir", str(tmp_path)])
