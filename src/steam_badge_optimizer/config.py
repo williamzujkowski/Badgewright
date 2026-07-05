@@ -36,7 +36,7 @@ MAX_NORMAL_BADGE_LEVEL = 5
 CURRENCY_IDS: dict[str, int] = {"USD": 1, "GBP": 2, "EUR": 3, "CHF": 4, "RUB": 5}
 
 #: Honest, contactable User-Agent. We do not impersonate a browser.
-USER_AGENT = "Badgewright/0.0.1 (+https://github.com/grenlan/Badgewright; local read-only planner)"
+USER_AGENT = "Badgewright/0.1.0 (+https://github.com/williamzujkowski/Badgewright)"
 
 
 @dataclass(slots=True)
