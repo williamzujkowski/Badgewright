@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the default steam-badges-db catalog URL — it pointed at `master/badges.json`
+  (404); the file is at `main/data/badges.json`. `sbo catalog import --online` now works
+  (verified live: 15,024 apps imported). Found by live end-to-end validation.
+
 ## [0.5.0] - 2026-07-05
 
 Correctness on the money path and easy distribution: multi-copy purchase costs are now

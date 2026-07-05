@@ -50,7 +50,8 @@ account before trusting a plan.
 
 ## Card-set catalog — `steam-badges-db`
 
-- `github.com/nolddor/steam-badges-db` — `badges.json` (+ `.min.json`, `.slim.json`),
+- `github.com/nolddor/steam-badges-db` — `data/badges.json` (+ `.min.json`, `.slim.json`)
+  on the `main` branch,
   updated **hourly**. Shape: `{"220": {"name": "Half-Life 2", "size": 8}}` where
   `size` = number of cards in the set.
 - Served via `raw.githubusercontent.com` (on the read allowlist).

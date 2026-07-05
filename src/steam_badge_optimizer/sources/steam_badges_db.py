@@ -33,7 +33,9 @@ __all__ = [
     "parse_badges_json",
 ]
 
-DEFAULT_BADGES_URL = "https://raw.githubusercontent.com/nolddor/steam-badges-db/master/badges.json"
+DEFAULT_BADGES_URL = (
+    "https://raw.githubusercontent.com/nolddor/steam-badges-db/main/data/badges.json"
+)
 PARSER_VERSION = "1"
 CATALOG_TTL_SECONDS = 3600  # steam-badges-db refreshes hourly
 MAX_BYTES = 32 * 1024 * 1024  # reject an implausibly large catalog (bomb guard)
