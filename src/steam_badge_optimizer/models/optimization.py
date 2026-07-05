@@ -34,13 +34,21 @@ class PurchaseCandidate(BaseModel):
     market_hash_name: str = Field(min_length=1)
     missing_quantity: int = Field(gt=0, description="Copies still needed to buy.")
     estimated_unit_price: Money | None = Field(
-        default=None, description="Per-copy estimate; None if price is unavailable."
+        default=None, description="Single-unit (lowest) ask; None if price is unavailable."
+    )
+    estimated_line_total: Money | None = Field(
+        default=None,
+        description="Modeled cost for all copies (order-book-walk); falls back to "
+        "unit x quantity when not set.",
     )
     confidence: Confidence = Confidence.LOW
 
     @property
     def estimated_total(self) -> Money | None:
-        """Total estimated cost = unit price x missing quantity, if priced."""
+        """Total estimated cost for all copies. Uses the modeled line total when set,
+        else unit price x missing quantity."""
+        if self.estimated_line_total is not None:
+            return self.estimated_line_total
         if self.estimated_unit_price is None:
             return None
         return Money(

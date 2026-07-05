@@ -55,23 +55,97 @@ def test_complete_badge_cost_and_math() -> None:
         report = compute_costs(store, target_level=5)
         badge = report.badges[0]
         # crafts_needed = 5 (no progress => level 0). missing A=4,B=5,C=5.
-        # cost = 4*10 + 5*20 + 5*30 = 290c.
+        # No median cached, so extra copies use the +15% inflation (ceil):
+        #   A: 10 + 3*ceil(11.5=12) = 46; B: 20 + 4*23 = 112; C: 30 + 4*ceil(34.5=35) = 170.
         assert badge.complete is True
         assert badge.crafts_needed == 5
-        assert badge.known_cost == Money(290, "USD")
-        assert badge.estimated_cost == Money(290, "USD")
+        assert badge.known_cost == Money(46 + 112 + 170, "USD")  # 328
+        assert badge.estimated_cost == Money(328, "USD")
         assert badge.expected_xp == 500
         assert badge.confidence is Confidence.LOW  # level was assumed
 
 
-def test_multi_unit_estimate_flagged_as_floor() -> None:
-    # Buying several copies walks the order book, so missing*lowest is only a floor;
-    # the badge must say so and not claim HIGH confidence.
+def test_multi_unit_estimate_modeled_and_over_floor() -> None:
+    # Buying several copies walks the order book: the estimate exceeds missing*lowest,
+    # is labeled modeled (not measured), and can't claim HIGH confidence.
     with Store.in_memory() as store:
         _seed_full_badge(store)  # missing 4-5 copies per card
         badge = compute_costs(store, target_level=5).badges[0]
-        assert any("floor" in n for n in badge.notes)
+        naive_floor = 4 * 10 + 5 * 20 + 5 * 30  # 290
+        assert badge.known_cost.cents > naive_floor  # no longer under-budgets
+        assert any("modeled" in n for n in badge.notes)
         assert badge.confidence is not Confidence.HIGH
+
+
+class TestMultiUnitModel:
+    def test_never_undershoots_naive_floor(self) -> None:
+        from steam_badge_optimizer.optimize.cost import _multi_unit_line_cents
+
+        for base in (3, 10, 137):
+            for median in (None, base, base * 2, base * 10):
+                for qty in range(1, 8):
+                    cost = _multi_unit_line_cents(base, median, qty)
+                    assert cost >= base * qty  # never below k*lowest
+
+    def test_monotonic_non_decreasing_in_quantity(self) -> None:
+        from steam_badge_optimizer.optimize.cost import _multi_unit_line_cents
+
+        prev = -1
+        for qty in range(0, 10):
+            cost = _multi_unit_line_cents(50, 80, qty)
+            assert cost >= prev
+            prev = cost
+
+    def test_median_is_capped_to_bound_overestimate(self) -> None:
+        from steam_badge_optimizer.optimize.cost import _multi_unit_line_cents
+
+        # A spiky median (10x lowest) is capped at 2x lowest for the extra copies.
+        # 2 copies: 100 + min(1000, 200) = 300, not 100 + 1000.
+        assert _multi_unit_line_cents(100, 1000, 2) == 300
+
+    def test_inflation_used_when_no_median(self) -> None:
+        from steam_badge_optimizer.optimize.cost import _multi_unit_line_cents
+
+        # 2 copies, base 100, no median: 100 + ceil(115) = 215.
+        assert _multi_unit_line_cents(100, None, 2) == 215
+
+
+def test_candidate_totals_reconcile_with_badge_cost() -> None:
+    # Per-card modeled totals must sum to the badge known_cost (no naive-floor leak into
+    # the report line items).
+    with Store.in_memory() as store:
+        _seed_full_badge(store)
+        badge = compute_costs(store, target_level=5).badges[0]
+        line_sum = sum(c.estimated_total.cents for c in badge.candidates)
+        assert line_sum == badge.known_cost.cents
+        # And each line total exceeds the naive unit*qty floor for multi-copy lines.
+        for c in badge.candidates:
+            if c.missing_quantity > 1:
+                assert c.estimated_total.cents > c.estimated_unit_price.cents * c.missing_quantity
+
+
+def test_median_proxy_used_in_full_path() -> None:
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=1, set_size=1))
+        store.upsert_card(Card(appid=1, market_hash_name="1-A"))
+        store.add_price_snapshot(
+            PriceSnapshot(
+                item=MarketItem(appid=1, market_hash_name="1-A"),
+                lowest=Money(100, "USD"),
+                median=Money(150, "USD"),
+                volume=200,
+                source=SourceRecord(
+                    kind=SourceKind.STEAM_MARKET,
+                    url="https://steamcommunity.com/market/priceoverview/",
+                    fetched_at=datetime.now(UTC),
+                    parser_version="1",
+                    raw_sha256=SourceRecord.sha256_of(b"m"),
+                    cache_ttl_seconds=86400,
+                ),
+            )
+        )
+        # missing 5: 100 + 4*min(150, 200) = 100 + 600 = 700.
+        assert compute_costs(store, target_level=5).badges[0].known_cost == Money(700, "USD")
 
 
 def test_crafts_needed_uses_current_level() -> None:
@@ -79,9 +153,9 @@ def test_crafts_needed_uses_current_level() -> None:
         _seed_full_badge(store)
         store.upsert_badge_progress(UserBadgeProgress(appid=440, level=3))
         badge = compute_costs(store, target_level=5).badges[0]
-        # crafts_needed = 2. missing A=max(0,2-1)=1, B=2, C=2 => 10 + 40 + 60 = 110.
+        # crafts_needed = 2. missing A=1 (10), B=2 (20 + 23 = 43), C=2 (30 + 35 = 65).
         assert badge.crafts_needed == 2
-        assert badge.known_cost == Money(110, "USD")
+        assert badge.known_cost == Money(10 + 43 + 65, "USD")  # 118
         assert badge.confidence is not Confidence.LOW  # level known, prices fresh+volume
 
 

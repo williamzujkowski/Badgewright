@@ -20,6 +20,7 @@ Design decisions (per the approving vote — fail closed, never mislead a purcha
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from math import ceil
 from typing import TYPE_CHECKING
 
 from ..config import MAX_NORMAL_BADGE_LEVEL, XP_PER_BADGE_LEVEL
@@ -29,6 +30,31 @@ if TYPE_CHECKING:
     from ..db import Store
 
 __all__ = ["BadgeCost", "CostReport", "compute_costs"]
+
+# Conservative multi-unit (order-book-walk) cost model (#15). priceoverview `lowest` is a
+# single-unit ask, so buying k copies costs more than k*lowest. We price the first copy at
+# `lowest` and each additional copy at a book-walk proxy: the median (the typical
+# transacted price), but capped at DEPTH_CAP x lowest so a spiky median can't wildly
+# over-estimate and steer users off a genuinely cheap badge. With no median, use a
+# documented inflation. The estimate is always >= k*lowest (never undershoots) and
+# monotonic non-decreasing in quantity.
+MULTI_UNIT_DEPTH_CAP = 2.0  # an extra copy costs at most 2x the lowest ask
+MULTI_UNIT_INFLATION = 1.15  # +15% per extra copy when no median proxy is available
+
+
+def _multi_unit_line_cents(base_cents: int, median_cents: int | None, qty: int) -> int:
+    """Conservative cost in cents for buying ``qty`` copies given the single-unit price."""
+    if qty <= 0:
+        return 0
+    if qty == 1:
+        return base_cents
+    cap = ceil(base_cents * MULTI_UNIT_DEPTH_CAP)
+    if median_cents is not None and median_cents >= base_cents:
+        extra = min(median_cents, cap)
+    else:
+        extra = ceil(base_cents * MULTI_UNIT_INFLATION)
+    extra = max(extra, base_cents)  # additional copies never cost less than the lowest ask
+    return base_cents + (qty - 1) * extra
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,26 +173,30 @@ def compute_costs(
                 any_stale = True
             if snap is not None and (snap.volume is None or snap.volume < min_volume):
                 low_volume = True
+            higher = (
+                snap.median.cents
+                if (snap is not None and snap.lowest is not None and snap.median is not None)
+                else None
+            )
+            line = Money(_multi_unit_line_cents(unit.cents, higher, missing), currency)
             candidates.append(
                 PurchaseCandidate(
                     appid=appid,
                     market_hash_name=card.market_hash_name,
                     missing_quantity=missing,
                     estimated_unit_price=unit,
+                    estimated_line_total=line,  # modeled total, so reports match the plan
                     confidence=Confidence.MEDIUM,
                 )
             )
-            line_costs.append(Money(unit.cents * missing, currency))
+            line_costs.append(line)
             if missing > 1:
                 multi_unit = True
 
         if multi_unit:
-            # priceoverview's `lowest` is a single-unit ask, so `missing * lowest` is a
-            # FLOOR: buying several copies walks the order book and typically costs more.
-            # We surface this rather than silently under-budget (proper depth: #15).
             notes.append(
-                "estimate is a floor — buying multiple copies of a card usually costs "
-                "more than quantity x lowest (order-book depth not yet modeled)"
+                "multi-copy cost is a conservative model (units past the first assume a "
+                "book-walk toward the median, capped) — modeled, not order-book-measured"
             )
 
         if cards_unknown > 0:

@@ -64,7 +64,8 @@ def assert_inert_html(document: str) -> None:
 
 def _row_html(row: PlanRow) -> str:
     e = html.escape
-    price = f"{e(row.unit_price)} x {row.missing_qty} = {e(row.total_price)}"
+    # The total is a modeled book-walk cost, not unit x qty, so don't imply arithmetic.
+    price = f"{row.missing_qty} copies (from {e(row.unit_price)} ea) ~ {e(row.total_price)}"
     link = e(row.market_url, quote=True)
     return (
         "<tr>"
