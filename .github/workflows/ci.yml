@@ -42,6 +42,9 @@ jobs:
           ruff check .
           ruff format --check .
 
+      - name: Mypy (strict, src)
+        run: mypy src/steam_badge_optimizer/
+
       - name: Pytest
         run: pytest -q
 

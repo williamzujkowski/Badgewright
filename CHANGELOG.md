@@ -8,6 +8,10 @@ versioning once it reaches 1.0.
 
 ### Added — Milestone 2 (in progress)
 
+- Local SQLite persistence (`db.Store`, stdlib `sqlite3`, no ORM): forward-only
+  migration runner, current-state upserts for catalog/inventory/badge progress,
+  append-only price history with source-hash dedup, and provenance round-tripping.
+- `mypy --strict` on `src/` is now a CI gate.
 - Core pydantic domain models (`SteamApp`, `BadgeSet`, `Card`, `UserBadgeProgress`,
   `UserCardInventory`, `MarketItem`, `PriceSnapshot`, `PurchaseCandidate`) with strict
   validation and a `Money` value object.

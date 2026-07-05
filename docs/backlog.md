@@ -28,8 +28,9 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   `UserBadgeProgress`, `UserCardInventory`, `MarketItem`, `PriceSnapshot`,
   `PurchaseCandidate` + `Money`/`parse_steam_price` (pydantic, validated, tested).
   `OptimizationRun`/`PurchasePlan` deferred until the optimizer consumes them (YAGNI).
-- [ ] **1.2** SQLite persistence — schema, migrations, import/update semantics,
-  dedup by source hash + logical key; historical snapshots preserved.
+- [x] **1.2** SQLite persistence — stdlib sqlite3 `db.Store`: migration runner,
+  current-state upserts, append-only price history, source-hash dedup, provenance
+  round-trip. See #3.
 - [ ] **1.3 (NEW, security)** No-secrets schema invariant + test — assert no field
   named `steamLoginSecure`/`sessionid`/`shared_secret`/`identity_secret` exists in
   any model or table.
