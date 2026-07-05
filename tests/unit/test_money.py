@@ -21,10 +21,21 @@ class TestParseSteamPrice:
             ("$5", "USD", 500),  # bare integer
             ("$0.10", "USD", 10),
             ("2,00€", "EUR", 200),
+            ("$.50", "USD", 50),  # leading decimal point is significant (0.50)
+            ("$1.5", "USD", 150),  # single fractional digit
+            ("1,000", "USD", 100000),  # thousands-only grouping ($1000.00)
+            ("CHF 1'234.56", "CHF", 123456),  # Swiss apostrophe grouping
         ],
     )
     def test_parses_localized_formats(self, text: str, currency: str, cents: int) -> None:
         assert parse_steam_price(text, currency).cents == cents
+
+    @pytest.mark.parametrize("bad", ["-$1.00", "($1.00)", "-1,50 EUR"])
+    def test_negative_or_accounting_rejected(self, bad: str) -> None:
+        # Steam never returns these; a wrong positive parse at the trust boundary
+        # would be worse than a hard error.
+        with pytest.raises(PriceParseError):
+            parse_steam_price(bad, "USD")
 
     def test_currency_is_recorded_and_uppercased(self) -> None:
         m = parse_steam_price("$0.03", "usd")

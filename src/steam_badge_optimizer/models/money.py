@@ -90,19 +90,21 @@ def parse_steam_price(text: str, currency: str) -> Money:
     currency = currency.upper()
     if currency not in CURRENCY_IDS:
         raise PriceParseError(f"unknown currency {currency!r}; known: {sorted(CURRENCY_IDS)}")
-    if text is None or not str(text).strip():
+    raw = str(text)
+    if not raw.strip():
         raise PriceParseError("empty price string")
+    # Reject negative / accounting notation explicitly. The digit filter below strips
+    # '-' and '()', so this must be checked on the raw text or it passes silently.
+    if "-" in raw or "(" in raw:
+        raise PriceParseError(f"negative/accounting price not allowed: {text!r}")
 
-    # Trailing separators are never part of the number -- they come from a currency
-    # abbreviation ending in a period (e.g. the Russian ruble suffix) that the filter
-    # captured along with the digits.
-    numeric = "".join(_KEEP.findall(str(text))).strip(".,")
+    # Only *trailing* separators are stripped -- they come from a currency abbreviation
+    # ending in a period (e.g. the Russian ruble suffix) captured with the digits.
+    # A leading separator is significant (".50" == 0.50), so we must not strip it.
+    numeric = "".join(_KEEP.findall(raw)).rstrip(".,")
     if not numeric or not any(ch.isdigit() for ch in numeric):
         raise PriceParseError(f"no numeric content in {text!r}")
 
     value = _normalize_decimal_string(numeric)
-    if value < 0:
-        raise PriceParseError(f"negative price {text!r}")
-
     cents = int((value * 100).to_integral_value(rounding="ROUND_HALF_UP"))
     return Money(cents=cents, currency=currency)
