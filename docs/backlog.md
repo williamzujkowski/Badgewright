@@ -168,5 +168,6 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 - [x] **#72** Tier-2 set-cost aggregation + `sbo market cheapest-badges` (liquidity-gated,
   cost-per-XP, bottleneck flag; captures sell_price+sell_listings; PriceSnapshot.listings).
-- [ ] **#73** Bounded opt-in cheapest-first market sweep (the price source).
+- [x] **#73** Bounded opt-in cheapest-first market sweep (`sbo market sweep`; default-off,
+  429-hard-stop, resumable cursor, --max-pages cap, --until-sets early-exit).
 - [ ] **#74** Tier-3 top-K depth enrichment.
