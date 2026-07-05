@@ -173,21 +173,23 @@ def compute_costs(
                 any_stale = True
             if snap is not None and (snap.volume is None or snap.volume < min_volume):
                 low_volume = True
+            higher = (
+                snap.median.cents
+                if (snap is not None and snap.lowest is not None and snap.median is not None)
+                else None
+            )
+            line = Money(_multi_unit_line_cents(unit.cents, higher, missing), currency)
             candidates.append(
                 PurchaseCandidate(
                     appid=appid,
                     market_hash_name=card.market_hash_name,
                     missing_quantity=missing,
                     estimated_unit_price=unit,
+                    estimated_line_total=line,  # modeled total, so reports match the plan
                     confidence=Confidence.MEDIUM,
                 )
             )
-            higher = (
-                snap.median.cents
-                if (snap is not None and snap.lowest is not None and snap.median is not None)
-                else None
-            )
-            line_costs.append(Money(_multi_unit_line_cents(unit.cents, higher, missing), currency))
+            line_costs.append(line)
             if missing > 1:
                 multi_unit = True
 

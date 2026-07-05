@@ -110,6 +110,44 @@ class TestMultiUnitModel:
         assert _multi_unit_line_cents(100, None, 2) == 215
 
 
+def test_candidate_totals_reconcile_with_badge_cost() -> None:
+    # Per-card modeled totals must sum to the badge known_cost (no naive-floor leak into
+    # the report line items).
+    with Store.in_memory() as store:
+        _seed_full_badge(store)
+        badge = compute_costs(store, target_level=5).badges[0]
+        line_sum = sum(c.estimated_total.cents for c in badge.candidates)
+        assert line_sum == badge.known_cost.cents
+        # And each line total exceeds the naive unit*qty floor for multi-copy lines.
+        for c in badge.candidates:
+            if c.missing_quantity > 1:
+                assert c.estimated_total.cents > c.estimated_unit_price.cents * c.missing_quantity
+
+
+def test_median_proxy_used_in_full_path() -> None:
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=1, set_size=1))
+        store.upsert_card(Card(appid=1, market_hash_name="1-A"))
+        store.add_price_snapshot(
+            PriceSnapshot(
+                item=MarketItem(appid=1, market_hash_name="1-A"),
+                lowest=Money(100, "USD"),
+                median=Money(150, "USD"),
+                volume=200,
+                source=SourceRecord(
+                    kind=SourceKind.STEAM_MARKET,
+                    url="https://steamcommunity.com/market/priceoverview/",
+                    fetched_at=datetime.now(UTC),
+                    parser_version="1",
+                    raw_sha256=SourceRecord.sha256_of(b"m"),
+                    cache_ttl_seconds=86400,
+                ),
+            )
+        )
+        # missing 5: 100 + 4*min(150, 200) = 100 + 600 = 700.
+        assert compute_costs(store, target_level=5).badges[0].known_cost == Money(700, "USD")
+
+
 def test_crafts_needed_uses_current_level() -> None:
     with Store.in_memory() as store:
         _seed_full_badge(store)
