@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from ..config import CURRENCY_IDS
+from ..config import CURRENCY_IDS, STEAM_COMMUNITY_APPID
 from ..models import MarketItem, Money, PriceSnapshot
 from ..models.money import PriceParseError, parse_steam_price
 from ..models.provenance import SourceKind, SourceRecord
@@ -85,8 +85,12 @@ def fetch_price(
     if currency not in CURRENCY_IDS:
         raise ValueError(f"unknown currency {currency!r}; known: {sorted(CURRENCY_IDS)}")
 
+    # Trading cards are listed on the Community Market under appid 753 (the community
+    # app), with the game appid encoded in the market_hash_name (e.g. "440-Heavy"). Using
+    # the game's own appid returns success:true but NO price. Badgewright only ever prices
+    # cards, so the market query is always appid 753.
     params = {
-        "appid": item.appid,
+        "appid": STEAM_COMMUNITY_APPID,
         "currency": CURRENCY_IDS[currency],
         "market_hash_name": item.market_hash_name,
     }

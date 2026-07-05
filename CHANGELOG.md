@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Price fetching now queries the Community Market under **appid 753** (where trading
+  cards are actually listed) instead of the game's appid, which returned `success:true`
+  with no price — so `prices refresh` reported every real card "unavailable" and the
+  optimizer couldn't cost real inventories. Found and fixed via live testing on a real
+  account (#66); verified live (0 → 7/10 cards priced).
+
 ### Added
 
 - **`sbo delete-all`** (#8.4): purge all local data — the SQLite database **and its

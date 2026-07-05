@@ -48,6 +48,8 @@ class TestFetchPrice:
         url = str(req.url)
         assert "%26" in url and " & " not in url
         assert "currency=3" in url  # EUR id
+        # Cards are priced under the community appid 753, NOT the game appid (570).
+        assert "appid=753" in url and "appid=570" not in url
 
     @respx.mock
     def test_success_false_returns_none(self) -> None:
