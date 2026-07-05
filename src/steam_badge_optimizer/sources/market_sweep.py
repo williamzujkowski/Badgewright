@@ -77,10 +77,12 @@ def _load_cursor(data_dir: Path) -> int:
     if not path.is_file():
         return 0
     try:
-        start = orjson.loads(path.read_bytes()).get("start", 0)
+        data = orjson.loads(path.read_bytes())
     except (orjson.JSONDecodeError, OSError):
         return 0
-    return start if isinstance(start, int) and start >= 0 else 0
+    start = data.get("start", 0) if isinstance(data, dict) else 0
+    # `type(start) is int` rejects bool (True/False are ints) and any non-int garbage.
+    return start if type(start) is int and start >= 0 else 0
 
 
 def _save_cursor(data_dir: Path, start: int, total_count: int) -> None:

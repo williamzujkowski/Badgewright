@@ -183,6 +183,24 @@ class TestSweep:
             sweep_cheapest(store, client, tmp_path, max_pages=0)
 
 
+class TestCursorRobustness:
+    @pytest.mark.parametrize(
+        "content",
+        [b"42", b"[1,2,3]", b'"hi"', b"not json", b"", b'{"start": true}', b'{"start": -5}'],
+    )
+    def test_corrupt_cursor_falls_back_to_zero(self, tmp_path, content: bytes) -> None:
+        from steam_badge_optimizer.sources.market_sweep import _load_cursor
+
+        (tmp_path / "sweep_cursor.json").write_bytes(content)
+        assert _load_cursor(tmp_path) == 0  # never crashes, never a garbage start
+
+    def test_valid_cursor_loads(self, tmp_path) -> None:
+        from steam_badge_optimizer.sources.market_sweep import _load_cursor
+
+        (tmp_path / "sweep_cursor.json").write_bytes(orjson.dumps({"start": 300}))
+        assert _load_cursor(tmp_path) == 300
+
+
 class TestSweepCliIsOptIn:
     """The bulk sweep must be impossible to trigger by accident (no live network in CI)."""
 
