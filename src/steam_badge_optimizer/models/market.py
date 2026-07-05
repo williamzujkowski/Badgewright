@@ -43,7 +43,10 @@ class PriceSnapshot(BaseModel):
     item: MarketItem
     lowest: Money | None = None
     median: Money | None = None
-    volume: int | None = Field(default=None, ge=0)
+    volume: int | None = Field(default=None, ge=0, description="24h sales count (priceoverview).")
+    listings: int | None = Field(
+        default=None, ge=0, description="Current asks / ask-side depth (market search)."
+    )
     source: SourceRecord
 
     @model_validator(mode="after")

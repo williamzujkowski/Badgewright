@@ -60,6 +60,8 @@ class CardDiscoveryError(ValueError):
 class DiscoveredCard:
     market_hash_name: str
     is_foil: bool
+    sell_price_cents: int | None = None  # lowest ask, from search/render `sell_price`
+    listings: int | None = None  # current asks (ask-side depth), from `sell_listings`
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,9 +109,22 @@ def parse_search_results(raw: bytes) -> list[DiscoveredCard]:
         desc = entry.get("asset_description")
         card_type = desc.get("type", "") if isinstance(desc, dict) else ""
         seen[hash_name] = DiscoveredCard(
-            market_hash_name=hash_name, is_foil=_is_foil(hash_name, str(card_type))
+            market_hash_name=hash_name,
+            is_foil=_is_foil(hash_name, str(card_type)),
+            sell_price_cents=_non_negative_int(entry.get("sell_price")),
+            listings=_non_negative_int(entry.get("sell_listings")),
         )
     return list(seen.values())
+
+
+def _non_negative_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
 
 
 def _total_count(raw: bytes) -> int:

@@ -106,6 +106,13 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX idx_price_snapshot_item "
         "ON price_snapshot (appid, market_hash_name, fetched_at)",
     ],
+    # --- v2: ask-side depth (number of listings) from the market search endpoint. --
+    # priceoverview gives 24h `volume`; search/render gives current `listings` — both are
+    # nullable liquidity signals depending on the source. Adding a nullable column needs
+    # no table rebuild.
+    [
+        "ALTER TABLE price_snapshot ADD COLUMN listings INTEGER",
+    ],
 ]
 
 
