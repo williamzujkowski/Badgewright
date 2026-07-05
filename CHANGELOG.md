@@ -8,6 +8,13 @@ versioning once it reaches 1.0.
 
 ### Added — Milestone 2 (in progress)
 
+- Guarded read-only HTTP client (`sources.SafeClient`): the single httpx egress
+  point — validates method+URL via the safety guard before any socket, exposes only
+  read verbs, keeps no cookie jar, sends an honest User-Agent, surfaces HTTP 429
+  instead of hammering, and retries only transient transport errors.
+- steam-badges-db catalog import (`sbo catalog import --file … | --online`) and
+  `sbo catalog list`: parses `badges.json` into `SteamApp`+`BadgeSet`, persists with
+  provenance, tolerates malformed entries, and guards against oversized input.
 - Local SQLite persistence (`db.Store`, stdlib `sqlite3`, no ORM): forward-only
   migration runner, current-state upserts for catalog/inventory/badge progress,
   append-only price history with source-hash dedup, and provenance round-tripping.

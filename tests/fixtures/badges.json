@@ -1,0 +1,8 @@
+{
+  "220": { "name": "Half-Life 2", "size": 8 },
+  "440": { "name": "Team Fortress 2", "size": 12 },
+  "570": { "name": "Dota 2", "size": 9 },
+  "99999901": { "size": 5 },
+  "not-an-appid": { "name": "Bad Key", "size": 5 },
+  "88": { "name": "Bad Size", "size": 0 }
+}
