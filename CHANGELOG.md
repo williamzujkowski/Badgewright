@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- Cost-to-complete calculator (`optimize.compute_costs`, Epic 5.1): per-badge cost to
+  reach a target level from cached catalog + inventory + prices. Handles current level
+  (crafts_needed = target - level), surfaces ready-to-craft badges, and — fail-closed —
+  marks a badge **incomplete** (never fabricates a cost) when card names are unknown or
+  any needed card is unpriced/unmarketable. Emits PurchaseCandidates and a coarse
+  High/Medium/Low confidence signal. The optimizer will rank only complete badges.
+
 ## [0.1.0] - 2026-07-05
 
 First tagged release: the complete local, read-only **data layer** — every input the

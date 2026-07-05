@@ -78,9 +78,10 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 5 — Badge-cost optimizer
 
-- [ ] **5.1** Cost-to-complete calculator — missing cards vs inventory; duplicates;
-  `copies_needed = target_level`; exclude L5 by default; per-card + per-badge totals;
-  foil excluded unless enabled. (Depends on 4.6 for accurate cost.)
+- [x] **5.1** Cost-to-complete calculator (`optimize.compute_costs`): per-badge cost to
+  reach a target level; `crafts_needed = target - current_level`; duplicates subtracted;
+  excludes L5/foil; ready-to-craft surfaced; incomplete-badge fail-closed (no fabricated
+  cost); confidence signal. See #38. (Accuracy refined later by order-book depth #15.)
 - [ ] **5.2** Greedy MVP optimizer — sort candidate crafts by (risk-adjusted) marginal
   cost/XP, fill to budget/target. **Provably optimal for uniform XP** (see
   optimizer-model.md); ships as the primary optimizer.
