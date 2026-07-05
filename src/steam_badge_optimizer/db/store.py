@@ -350,6 +350,7 @@ class Store:
 
     def iter_price_items(self) -> Iterator[tuple[int, str]]:
         for r in self.conn.execute(
-            "SELECT DISTINCT appid, market_hash_name FROM price_snapshot"
+            "SELECT DISTINCT appid, market_hash_name FROM price_snapshot "
+            "ORDER BY appid, market_hash_name"
         ).fetchall():
             yield int(r["appid"]), str(r["market_hash_name"])

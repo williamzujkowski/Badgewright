@@ -483,9 +483,69 @@ def cards_discover(
 
 
 @market_app.command("scan-weakness")
-def market_scan_weakness(top: int = typer.Option(50, help="Number of results.")) -> None:
-    """Research: rank cards by price-weakness signals. Never trades."""
-    _not_yet("market scan-weakness", "Milestone 5")
+def market_scan_weakness(
+    top: int = typer.Option(20, help="Number of results."),
+    min_volume: int = typer.Option(5, help="Volume below this is flagged low-confidence."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Research: rank cards by liquidity-weighted price-weakness signals. Never trades."""
+    from .analytics import scan_weakness
+    from .db import Store
+
+    if top <= 0:
+        typer.secho("--top must be positive.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if min_volume < 1:
+        typer.secho("--min-volume must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        rows = scan_weakness(store, currency=settings.currency, min_volume=min_volume, top=top)
+    if not rows:
+        typer.echo("No priced cards to scan yet. Run: sbo prices refresh --online")
+        return
+    typer.secho(f"Price-weakness research ({settings.currency}) — NOT trading advice:", bold=True)
+    for r in rows:
+        low = f"{r.lowest.amount:.2f}" if r.lowest else "n/a"
+        typer.echo(
+            f"  {r.appid} {r.market_hash_name}: lowest {low}, vol {r.volume or 0}, "
+            f"score {r.score:.2f} [{r.confidence.value}] — {'; '.join(r.signals) or 'ok'}"
+        )
+    typer.secho("\nResearch only. Buy/sell decisions are yours, made manually in Steam.", dim=True)
+
+
+@market_app.command("scan-sets")
+def market_scan_sets(
+    sort: str = typer.Option("cheapest", help="Sort: cheapest or dominance."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Research: set-level cost and one-card-dominates signals. Never trades."""
+    from .analytics import scan_sets
+    from .db import Store
+
+    if sort not in {"cheapest", "dominance"}:
+        typer.secho("--sort must be 'cheapest' or 'dominance'.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        sets = scan_sets(store, currency=settings.currency)
+    complete = [s for s in sets if s.complete and s.total_cost is not None]
+    if sort == "dominance":
+        complete.sort(key=lambda s: s.card_dominance or 0, reverse=True)
+    else:
+        complete.sort(key=lambda s: s.total_cost.cents if s.total_cost else 0)
+    if not complete:
+        typer.echo("No fully-known, priced sets yet. Run: sbo cards discover + prices refresh.")
+        return
+    typer.secho(f"Set-level research ({settings.currency}) — NOT trading advice:", bold=True)
+    for s in complete:
+        total = f"{s.total_cost.amount:.2f}" if s.total_cost else "n/a"
+        dom = f"{s.card_dominance * 100:.0f}%" if s.card_dominance is not None else "n/a"
+        typer.echo(
+            f"  appid {s.appid}: full set {total}, top card {dom} of cost"
+            f"{' — ' + '; '.join(s.signals) if s.signals else ''}"
+        )
+    typer.secho("\nResearch only.", dim=True)
 
 
 if __name__ == "__main__":  # pragma: no cover
