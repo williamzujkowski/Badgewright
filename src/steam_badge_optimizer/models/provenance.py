@@ -14,7 +14,7 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, field_validator
 
 
 class SourceKind(StrEnum):
@@ -32,10 +32,18 @@ class SourceRecord(BaseModel):
     """Provenance for a single imported/cached datum."""
 
     kind: SourceKind
-    url: HttpUrl | None = Field(
+    url: str | None = Field(
         default=None,
-        description="Origin URL, or None for a manual/file import (see file_name).",
+        description="Origin URL (http/https), or None for a manual/file import.",
     )
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith(("http://", "https://")):
+            raise ValueError(f"url must be http(s), got {value!r}")
+        return value
+
     file_name: str | None = Field(
         default=None, description="Basename of the imported file, for manual imports."
     )

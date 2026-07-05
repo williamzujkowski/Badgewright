@@ -53,8 +53,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 3 — Card-set catalog
 
-- [ ] **3.1** Import `steam-badges-db` (`nolddor/steam-badges-db`, hourly) from file
-  and URL; normalize appid/name/size; store catalog version + provenance.
+- [x] **3.1** Import `steam-badges-db` from file and URL (via SafeClient); normalize
+  appid/name/size; provenance; lenient on malformed entries; size-capped. See #5.
 - [ ] **3.2** Card-name discovery — resolve card names from inventory/market/badge
   pages/manual; confidence score per name; unknown cards represented explicitly.
 

@@ -89,9 +89,58 @@ def init(
 @catalog_app.command("import")
 def catalog_import(
     source: str = typer.Option("steam-badges-db", help="Catalog source name."),
+    file: str | None = typer.Option(None, help="Path to a local badges.json (offline)."),
+    url: str | None = typer.Option(None, help="Override the catalog URL (needs --online)."),
+    online: bool = typer.Option(False, help="Allow a network fetch (default is offline)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
     """Import the public card-set catalog (appid, name, set size)."""
-    _not_yet("catalog import", "Milestone 2")
+    from .db import Store
+    from .sources import steam_badges_db as sbd
+    from .sources.http_client import SafeClient
+
+    if source != "steam-badges-db":
+        typer.secho(f"Unknown catalog source {source!r}.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        if file:
+            result = sbd.import_from_file(store, file)
+        elif online:
+            with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+                result = sbd.import_from_url(store, client, url or sbd.DEFAULT_BADGES_URL)
+        else:
+            typer.secho(
+                "Offline by default: pass --file <badges.json>, or --online to fetch.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(code=2)
+    typer.secho(
+        f"Imported {result.imported} apps ({result.skipped} skipped) into {settings.db_path}.",
+        fg=typer.colors.GREEN,
+    )
+
+
+@catalog_app.command("list")
+def catalog_list(
+    limit: int = typer.Option(20, help="Max rows to show."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """List imported apps that have trading-card badge sets."""
+    from .db import Store
+
+    settings = Settings.resolve(data_dir=data_dir)
+    with Store(settings.db_path) as store:
+        apps = store.list_apps()
+    if not apps:
+        typer.echo("No catalog imported yet. Run: sbo catalog import --file badges.json")
+        return
+    for app in apps[:limit]:
+        typer.echo(f"  {app.appid:>8}  {app.name}")
+    if len(apps) > limit:
+        typer.echo(f"  ... and {len(apps) - limit} more")
 
 
 @inventory_app.command("import")
