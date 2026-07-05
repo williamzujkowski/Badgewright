@@ -2,10 +2,10 @@
 
 **A local-first, read-only Steam trading-card badge optimizer and market-intelligence tool.**
 
-Badgewright helps you level your Steam account as cheaply as possible by reading
-your badge/card/inventory state and market prices, modeling the cheapest path to a
-target level or budget, and producing a **human-reviewable purchase plan**. You then
-buy the cards yourself, manually, inside Steam.
+Badgewright finds the **cheapest Steam badges to make** — across your own games or the
+whole market — by reading public card/inventory/market data, modeling the cost to complete
+each badge, and producing a **human-reviewable plan**. You then buy the cards yourself,
+manually, inside Steam. It never touches your account.
 
 ## What it does — and what it will never do
 
@@ -17,43 +17,92 @@ buy the cards yourself, manually, inside Steam.
 
 This boundary is not just a promise — it is **structurally enforced** in code. Every
 outbound request goes through `steam_badge_optimizer.safety`, which permits only
-side-effect-free HTTP methods (`GET`/`HEAD`) to a small allowlist of read-only Steam
-hosts, and trips a hard failure on any URL that names a known action route (buy,
-sell, craft, trade, list, cancel). See [`docs/adr/0001-safety-boundary.md`](docs/adr/0001-safety-boundary.md).
+side-effect-free HTTP methods (`GET`/`HEAD`/`OPTIONS`) to a small allowlist of read-only
+Steam hosts, and trips a hard failure on any URL that names a known action route (buy,
+sell, craft, trade, list, cancel). A CI gate parses the source and fails the build if a
+mutating HTTP verb or an egress path outside the guarded client is ever introduced. See
+[`docs/adr/0001-safety-boundary.md`](docs/adr/0001-safety-boundary.md).
 
 Steam's Subscriber Agreement (§4.C) prohibits scripts, bots, macros, and other
 non-human-controlled systems from interacting with Steam. Badgewright stays firmly
 on the read / calculate / export side of that line.
 
-## Status
-
-Feature-complete for the core workflow. The full chain works end-to-end, all local and
-read-only:
-
-- Import the card-set **catalog** (`catalog import`), resolve a **SteamID** (`steamid`),
-  ingest your **inventory** (`inventory import`) and **badge levels** (`badges import`),
-  discover a game's full **card list** (`cards discover`), and cache **prices**
-  (`prices refresh`).
-- **Optimize** the cheapest path to a target level or budget (`optimize`), with a
-  conservative multi-copy cost model, and **export** a purchase plan (`report
-  purchase-plan --format csv|html`).
-- **Market research** (`market scan-weakness`, `scan-sets`, `anomalies`) — liquidity-
-  weighted, labeled research, never advice.
-
-Run `sbo --help` for the full map; the backlog and remaining ideas live in
-[`docs/backlog.md`](docs/backlog.md).
-
-## Install (development)
+## Install
 
 ```bash
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 sbo --help
-sbo safety      # print the read-only boundary
+sbo safety      # print the read-only boundary this tool enforces
 sbo init        # create the local data directory
 ```
 
 Requires Python 3.12+.
+
+## Quickstart: cheapest badges across all of Steam
+
+Find the cheapest badges to make from scratch. Networked steps are **opt-in** (`--online`),
+rate-polite, and bounded — nothing runs against Steam by default.
+
+```bash
+sbo catalog import --online                 # the card-set catalog (game -> #cards)
+
+# Bulk price sweep of the whole card market, CHEAPEST-FIRST. Off by default: needs both
+# --online and --confirm. Rate-polite (~1 req/5s), resumable (re-run to continue),
+# bounded by --max-pages so it can never crawl the whole market by accident.
+sbo market sweep --online --confirm --max-pages 30
+
+# Rank the cheapest badges from the cached prices (offline). Liquidity-gated: a badge whose
+# cards you can't actually buy won't rank as "cheapest".
+sbo market cheapest-badges --top 20
+
+# The cheapest cards scatter across many games, so a sweep alone rarely completes a full
+# set. plan-cheapest picks the games cheapest to FINISH and completes just those (opt-in,
+# bounded by --max-games), then re-ranks.
+sbo market plan-cheapest --online --confirm --max-games 5
+
+# Confirm the top candidates' liquidity with real 24h volume (opt-in, bounded to top K).
+sbo market cheapest-badges --top 20 --enrich-top 5 --online --confirm
+
+# Export the ranking for review/sharing — spreadsheet CSV or a static, inert HTML page.
+sbo report cheapest-badges --out cheapest.html
+```
+
+## Quickstart: cheapest way to level *your* account
+
+Reads only **public** data — your profile/inventory must be public. No login, ever.
+
+```bash
+sbo catalog import --online
+sbo inventory import --steamid <your-vanity-or-SteamID64> --online   # your owned cards
+sbo optimize --budget 5                                              # cheapest plan under $5
+sbo report purchase-plan --format html --out plan.html              # export it for review
+```
+
+## Command reference
+
+Run `sbo <command> --help` for the exact flags. Networked commands are always opt-in
+(`--online`); the bulk sweep and targeted completion additionally require `--confirm`.
+
+| Command | What it does |
+|---|---|
+| `sbo version` | Print the Badgewright version. |
+| `sbo safety` | Print the enforced read-only boundary. |
+| `sbo init` | Create the local data directory. |
+| `sbo catalog import [--online\|--file F]` | Import the card-set catalog (game → set size). |
+| `sbo steamid <id\|url\|vanity> [--online]` | Resolve a SteamID64 (no login). |
+| `sbo inventory import --steamid X [--online]` | Ingest your public card inventory. |
+| `sbo badges import [--online]` | Ingest your public badge levels. |
+| `sbo cards discover --appid N [--online]` | Enumerate a game's full card list. |
+| `sbo prices refresh [--online]` | Cache market prices (priceoverview). |
+| `sbo market sweep --online --confirm` | Bounded, resumable, cheapest-first bulk price sweep. |
+| `sbo market cheapest-badges [--enrich-top K]` | Rank cheapest badges to make (liquidity-gated). |
+| `sbo market plan-cheapest --online --confirm` | Complete the cheapest candidate games, then rank. |
+| `sbo market scan-sets / scan-weakness / anomalies` | Market-intelligence research (never advice). |
+| `sbo optimize [--budget B] [--badge-level L]` | Cheapest plan to a target level/budget (greedy). |
+| `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |
+| `sbo report cheapest-badges --out F` | Export the cheapest-badges ranking (CSV / inert HTML). |
+| `sbo delete-all [--yes]` | Purge all local data (DB + journal sidecars). |
 
 ## Run with Docker
 
@@ -87,10 +136,13 @@ Notes:
 
 ## Privacy
 
-Your Steam data stays on your machine. Default storage is a local SQLite database;
-there is no telemetry, no hosted backend, no remote analytics, and no Steam
-credential is ever collected (identity uses Steam's own OpenID flow, which returns
-only your SteamID). A future `delete-all` command purges all local data.
+Your Steam data stays on your machine. Default storage is a local SQLite database; there is
+no telemetry, no hosted backend, and no remote analytics. **No Steam credential is ever
+collected** — there is no login path at all. Identity is just a SteamID (resolved from an
+id, profile URL, or vanity name via public data), and reading your inventory/badges needs
+only that your Steam profile be public. An optional Steam **Web API key** (for badge levels)
+is read from the `SBO_STEAM_API_KEY` environment variable and is never written to disk.
+Run `sbo delete-all` to purge every local file (database plus its journal sidecars).
 
 ## Documentation
 
