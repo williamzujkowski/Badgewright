@@ -64,3 +64,33 @@ jobs:
       # account. Run them as an isolated, always-required gate.
       - name: Enforce read-only boundary
         run: pytest -q tests/unit/test_safety.py tests/unit/test_no_mutating_http.py
+
+  docker:
+    name: docker build & fixture demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t badgewright:ci .
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker run --rm --entrypoint id badgewright:ci -u)
+          echo "container uid: $uid"
+          test "$uid" = "10001"
+      - name: Hardened fixture demo (import + list persist in a volume)
+        run: |
+          docker volume create bw-ci-data
+          docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges \
+            --cap-drop ALL -v bw-ci-data:/data \
+            -v "$PWD/tests/fixtures/badges.json:/in/badges.json:ro" \
+            badgewright:ci catalog import --file /in/badges.json
+          out=$(docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges \
+            --cap-drop ALL -v bw-ci-data:/data badgewright:ci catalog list)
+          echo "$out"
+          echo "$out" | grep -q "Team Fortress 2"
+      - name: Image bakes no user database
+        run: |
+          # A *.sqlite3 must never be baked into the image (only in the mounted volume).
+          if docker run --rm --entrypoint sh badgewright:ci -c 'ls -1 /data 2>/dev/null | grep -q sqlite3'; then
+            echo "ERROR: a database was baked into the image"; exit 1
+          fi

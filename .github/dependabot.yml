@@ -17,3 +17,9 @@ updates:
     groups:
       python-deps:
         patterns: ["*"]
+
+  # Keep the Docker base image (tag + pinned digest) current.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

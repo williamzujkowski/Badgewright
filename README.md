@@ -27,14 +27,20 @@ on the read / calculate / export side of that line.
 
 ## Status
 
-Early scaffold (Milestone 1 — "Safe skeleton"). Working today:
+Feature-complete for the core workflow. The full chain works end-to-end, all local and
+read-only:
 
-- CLI entry point (`sbo` / `steam-badge-optimizer`) with the full command surface wired.
-- The structural read-only safety boundary + its regression tests.
-- Source-provenance model and configuration.
+- Import the card-set **catalog** (`catalog import`), resolve a **SteamID** (`steamid`),
+  ingest your **inventory** (`inventory import`) and **badge levels** (`badges import`),
+  discover a game's full **card list** (`cards discover`), and cache **prices**
+  (`prices refresh`).
+- **Optimize** the cheapest path to a target level or budget (`optimize`), with a
+  conservative multi-copy cost model, and **export** a purchase plan (`report
+  purchase-plan --format csv|html`).
+- **Market research** (`market scan-weakness`, `scan-sets`, `anomalies`) — liquidity-
+  weighted, labeled research, never advice.
 
-The data ingestion, price fetching, optimizer, and reports are stubbed and land in
-later milestones — run `sbo --help` to see the map. The backlog lives in
+Run `sbo --help` for the full map; the backlog and remaining ideas live in
 [`docs/backlog.md`](docs/backlog.md).
 
 ## Install (development)
@@ -48,6 +54,34 @@ sbo init        # create the local data directory
 ```
 
 Requires Python 3.12+.
+
+## Run with Docker
+
+The image ships only the code — **no credentials and no user data are baked in**, and it
+runs as a **non-root** user. Your local SQLite database lives in a Docker volume, not in
+the image.
+
+```bash
+docker build -t badgewright .
+docker volume create badgewright-data          # Docker owns it, so the non-root user can write
+
+# Import the bundled sample catalog, then plan — run hardened:
+docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL \
+  -v badgewright-data:/data \
+  -v "$PWD/tests/fixtures/badges.json:/in/badges.json:ro" \
+  badgewright catalog import --file /in/badges.json
+
+docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges --cap-drop ALL \
+  -v badgewright-data:/data badgewright catalog list
+```
+
+Notes:
+
+- Use a **named volume** (as above) so the container's non-root user (UID 10001) can
+  write; a host bind-mount would need matching ownership.
+- Mount your own input files **read-only** (`:ro`) and ensure they're readable.
+- The hardened flags (`--read-only`, `--cap-drop ALL`, `--security-opt no-new-privileges`)
+  are safe because the app only ever writes to the mounted `/data` volume.
 
 ## Privacy
 
