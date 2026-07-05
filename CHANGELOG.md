@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-05
+
+Correctness on the money path and easy distribution: multi-copy purchase costs are now
+modeled (no more under-budgeting) and reconcile across the plan and reports, and the tool
+ships as a hardened, non-root container.
+
 ### Added
 
 - **Docker packaging** (#9.2): a multi-stage `Dockerfile` (digest-pinned `python:3.13-slim`)
