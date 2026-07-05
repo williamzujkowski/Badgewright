@@ -108,7 +108,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   each; flag low-volume as risky.
 - [x] **6.2** Set-level mispricing (`sbo market scan-sets`; card-dominance/bottleneck). See Epic 6. — Σ card prices vs set utility; cheapest full sets;
   "avoid" sets with one overpriced bottleneck card; partial-set opportunities.
-- [ ] **6.3** Historical anomaly detection — drops/volume spikes/mean reversion/stale-
+- [x] **6.3** Historical anomaly detection (`sbo market anomalies`; sudden-drop/mean-
+  reversion/stale-median; fail-closed on thin history; research-only). See Epic 6. — drops/volume spikes/mean reversion/stale-
   median-vs-live-lowest; type + confidence + caveats; no trading action. (Depends on 4.4.)
 - [ ] **6.4 (NEW, optimizer)** Booster-pack / gems expected-cost path — alternative
   acquisition, often cheaper for large sets; compare as expected cost.
