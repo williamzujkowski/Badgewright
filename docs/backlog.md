@@ -24,9 +24,10 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 1 — Data model & storage
 
-- [ ] **1.1** Core domain models — `SteamUser`, `SteamApp`, `BadgeSet`, `Card`,
+- [x] **1.1** Core domain models — `SteamApp`, `BadgeSet`, `Card`,
   `UserBadgeProgress`, `UserCardInventory`, `MarketItem`, `PriceSnapshot`,
-  `PurchaseCandidate`, `OptimizationRun`, `PurchasePlan` (pydantic, validated, tested).
+  `PurchaseCandidate` + `Money`/`parse_steam_price` (pydantic, validated, tested).
+  `OptimizationRun`/`PurchasePlan` deferred until the optimizer consumes them (YAGNI).
 - [ ] **1.2** SQLite persistence — schema, migrations, import/update semantics,
   dedup by source hash + logical key; historical snapshots preserved.
 - [ ] **1.3 (NEW, security)** No-secrets schema invariant + test — assert no field

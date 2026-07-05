@@ -6,6 +6,16 @@ versioning once it reaches 1.0.
 
 ## [Unreleased]
 
+### Added — Milestone 2 (in progress)
+
+- Core pydantic domain models (`SteamApp`, `BadgeSet`, `Card`, `UserBadgeProgress`,
+  `UserCardInventory`, `MarketItem`, `PriceSnapshot`, `PurchaseCandidate`) with strict
+  validation and a `Money` value object.
+- `parse_steam_price` — robust parser for Steam's localized price display strings
+  (US/EU grouping, comma decimals, currency suffixes) into integer cents.
+- Repo hygiene: CONTRIBUTING guide (Conventional Commits + SemVer policy), PR/issue
+  templates, and a dependency-free PR-title validation workflow.
+
 ### Added — Milestone 1 (Safe skeleton)
 
 - Python 3.12+ package skeleton, `pyproject.toml` (hatchling), ruff + pytest config.
