@@ -382,9 +382,46 @@ def optimize(
 def report_purchase_plan(
     fmt: str = typer.Option("html", "--format", help="Output format: html or csv."),
     out: str = typer.Option(..., help="Output file path."),
+    budget: float | None = typer.Option(None, help="Spend cap for the plan."),
+    badge_level: int = typer.Option(5, help="Target level for each game badge (1-5)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
     """Export the purchase plan for manual review (inert; no scripts, no actions)."""
-    _not_yet("report purchase-plan", "Milestone 4")
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from .config import MAX_NORMAL_BADGE_LEVEL
+    from .db import Store
+    from .models import Money
+    from .optimize import build_plan, compute_costs
+    from .reports import write_csv, write_html
+
+    fmt = fmt.lower()
+    if fmt not in {"csv", "html"}:
+        typer.secho("--format must be 'csv' or 'html'.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not (1 <= badge_level <= MAX_NORMAL_BADGE_LEVEL):
+        typer.secho(f"--badge-level must be 1..{MAX_NORMAL_BADGE_LEVEL}.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if budget is not None and budget < 0:
+        typer.secho("--budget must be >= 0.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    money_budget = (
+        Money(int((Decimal(str(budget)) * 100).to_integral_value(ROUND_HALF_UP)), settings.currency)
+        if budget is not None
+        else None
+    )
+    with Store(settings.db_path) as store:
+        report = compute_costs(store, target_level=badge_level, currency=settings.currency)
+        plan = build_plan(report, budget=money_budget)
+        if fmt == "csv":
+            count = write_csv(plan, store, out)
+        else:
+            write_html(plan, store, out)
+            count = len(plan.chosen)
+    typer.secho(f"Wrote {fmt.upper()} plan ({count} rows) to {out}.", fg=typer.colors.GREEN)
+    typer.secho("Open it for manual review; buy cards yourself in Steam.", dim=True)
 
 
 @market_app.command("scan-weakness")

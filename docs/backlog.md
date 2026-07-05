@@ -115,16 +115,14 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 - [ ] **7.1** CLI summary `plan` — total spend, expected XP, budget remaining,
   confidence, warnings.
-- [ ] **7.2** CSV export — priority/appid/game/levels/card/qty/unit+total price/
+- [x] **7.2** CSV export (formula-injection-safe). See Epic 7. — priority/appid/game/levels/card/qty/unit+total price/
   market_hash_name/URL/price age/confidence/notes; machine-readable numerics.
-- [ ] **7.3** HTML purchase planner — group by badge, manual checkboxes, market links,
+- [x] **7.3** HTML purchase planner (inert, CSP, escaped, checkboxes). See Epic 7. — group by badge, manual checkboxes, market links,
   copy-text-only. Works offline.
 - [ ] **7.4** Manual batch sizing — batch by spend/badge/card count; smaller first
   batches for low-confidence data; regenerate after re-import.
-- [ ] **7.5 (NEW, security)** Inert-report invariant + test — assert generated reports
-  contain no `<script>`, no inline event handlers, no market-action URLs, and no
-  `steam://buy`-style schemes; HTML-escape every interpolated card/game name (stored-
-  XSS defense); strict CSP `default-src 'none'`.
+- [x] **7.5** Inert-report invariant — assert_inert_html gate (no script/on*=/steam:/js:/data:,
+  CSP required, http(s)-only hrefs, no forbidden market routes) + XSS/escaping tests. See #10.
 
 ## Epic 8 — Testing, fixtures, validation
 
