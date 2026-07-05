@@ -1,0 +1,33 @@
+# Keep the build context minimal and free of local/user/secret data.
+.git
+.github
+.venv
+venv
+__pycache__
+*.py[cod]
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+htmlcov
+
+# Never bake a user's local Steam data, database, secrets, or generated reports.
+*.sqlite3
+*.sqlite3-journal
+*.db
+badgewright.sqlite3
+/data
+data
+reports
+exports
+.env
+.env.*
+*.secret
+secrets
+
+# Docs/dev/test files not needed to build the runtime image.
+tests
+docs
+CHANGELOG.md
+CONTRIBUTING.md
+.pre-commit-config.yaml

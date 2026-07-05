@@ -6,6 +6,20 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Docker packaging** (#9.2): a multi-stage `Dockerfile` (digest-pinned `python:3.13-slim`)
+  running as a **non-root** numeric UID (10001), with local data in a mounted volume and
+  **no credentials or user data baked into the image**. Ships a `.dockerignore` (excludes
+  `.git`/`.venv`/`*.sqlite3`/`.env`/secrets), a README "Run with Docker" section with a
+  hardened `docker run` command (read-only rootfs, `no-new-privileges`, `cap-drop ALL`),
+  a CI build + fixture-demo smoke test, and Dependabot base-image updates.
+
+### Fixed
+
+- README status refreshed — it described the tool as an early stub; it is now
+  feature-complete for the core workflow.
+
 ### Changed
 
 - **Order-book-depth cost model** (#15): the cost calculator no longer prices k copies of

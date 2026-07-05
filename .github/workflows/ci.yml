@@ -64,3 +64,38 @@ jobs:
       # account. Run them as an isolated, always-required gate.
       - name: Enforce read-only boundary
         run: pytest -q tests/unit/test_safety.py tests/unit/test_no_mutating_http.py
+
+  docker:
+    name: docker build & fixture demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t badgewright:ci .
+      - name: Runs as a non-root user
+        run: |
+          uid=$(docker run --rm --entrypoint id badgewright:ci -u)
+          echo "container uid: $uid"
+          test "$uid" = "10001"
+      - name: Hardened fixture demo (import + list persist in a volume)
+        run: |
+          docker volume create bw-ci-data
+          docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges \
+            --cap-drop ALL -v bw-ci-data:/data \
+            -v "$PWD/tests/fixtures/badges.json:/in/badges.json:ro" \
+            badgewright:ci catalog import --file /in/badges.json
+          out=$(docker run --rm --read-only --tmpfs /tmp --security-opt no-new-privileges \
+            --cap-drop ALL -v bw-ci-data:/data badgewright:ci catalog list)
+          echo "$out"
+          echo "$out" | grep -q "Team Fortress 2"
+      - name: Image bakes no user database or secrets
+        run: |
+          # Scan the WHOLE filesystem (as root so nothing is hidden) — a database, .env,
+          # or secret must never be baked into any layer; local data lives only in the
+          # mounted volume at runtime.
+          found=$(docker run --rm --user 0 --entrypoint sh badgewright:ci -c \
+            'find / -xdev \( -name "*.sqlite3" -o -name "*.db" -o -name ".env" \) 2>/dev/null')
+          if [ -n "$found" ]; then
+            echo "ERROR: database/secret baked into the image:"; echo "$found"; exit 1
+          fi
+          echo "clean: no baked database or secrets"

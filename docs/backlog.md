@@ -146,7 +146,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 - [ ] **9.1** Install & CLI docs — `uv`/`pipx`; example commands; dry-run; offline;
   troubleshooting.
-- [ ] **9.2** Dockerized execution — mount local data dir; non-root; no baked creds;
+- [x] **9.2** Dockerized execution (multi-stage, non-root UID 10001, digest-pinned base,
+  named-volume data, hardened run, CI smoke test). See #9.2. — orig: — mount local data dir; non-root; no baked creds;
   SQLite persists in volume.
 - [ ] **9.3** First-release checklist — versioning, changelog, release workflow,
   security policy.
