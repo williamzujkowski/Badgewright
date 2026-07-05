@@ -8,6 +8,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
+- **Market intelligence** (`analytics.market_scan`, `sbo market scan-weakness` /
+  `scan-sets`, Story 4 / Epic 6): liquidity-weighted price-weakness research over
+  cached snapshots. Per-card `ask_vs_median_gap` (not "spread" — priceoverview has no
+  buy orders), volume adequacy, staleness, and volatility (only with >= 5 history
+  points, else "insufficient history" — never fabricated). Low-volume cards are flagged
+  LOW-CONFIDENCE and can never top the ranking on a gap alone. Set-level: single-set
+  cost and one-card-dominates (bottleneck) signals. Currency-consistent; labeled
+  research, never trading advice; executes nothing.
+
+### Added
+
 - **Card-name discovery** (`sources.card_discovery`, `sbo cards discover`, Epic 3.2):
   enumerates a game's full trading-card list from the Steam market search endpoint
   (read-only) so the optimizer can mark badges **complete** instead of "incomplete"

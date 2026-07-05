@@ -37,8 +37,8 @@ def test_init_creates_data_dir(tmp_path) -> None:
 
 
 def test_unimplemented_stub_exits_nonzero() -> None:
-    # market scan-weakness is still a stub (Milestone 5).
-    result = runner.invoke(app, ["market", "scan-weakness", "--top", "5"])
+    # badges import is still a stub (badge-progress ingestion, #2.4).
+    result = runner.invoke(app, ["badges", "import", "--file", "x.html"])
     assert result.exit_code == 2
     assert "not implemented" in result.output.lower()
 

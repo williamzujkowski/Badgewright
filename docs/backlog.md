@@ -102,10 +102,10 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 6 — Market intelligence & arbitrage research
 
-- [ ] **6.1** Price-weakness scoring — ask-vs-median gap, recent drop, volume adequacy,
+- [x] **6.1** Price-weakness scoring (`sbo market scan-weakness`; liquidity-weighted). See Epic 6. — ask-vs-median gap, recent drop, volume adequacy,
   staleness, volatility, ask-vs-median (not "spread"), set-completion impact; explain
   each; flag low-volume as risky.
-- [ ] **6.2** Set-level mispricing — Σ card prices vs set utility; cheapest full sets;
+- [x] **6.2** Set-level mispricing (`sbo market scan-sets`; card-dominance/bottleneck). See Epic 6. — Σ card prices vs set utility; cheapest full sets;
   "avoid" sets with one overpriced bottleneck card; partial-set opportunities.
 - [ ] **6.3** Historical anomaly detection — drops/volume spikes/mean reversion/stale-
   median-vs-live-lowest; type + confidence + caveats; no trading action. (Depends on 4.4.)
