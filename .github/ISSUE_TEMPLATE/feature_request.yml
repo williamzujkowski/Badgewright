@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a new capability (read / calculate / export only).
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What decision would this help the user make?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+    validations:
+      required: false
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Read-only boundary
+      options:
+        - label: This stays on the read/calculate/export side — it does not buy, sell, craft, trade, list, log in, or automate any Steam action.
+          required: true

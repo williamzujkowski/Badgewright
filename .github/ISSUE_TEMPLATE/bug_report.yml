@@ -1,0 +1,29 @@
+name: Bug report
+description: Something is wrong or produces an incorrect plan/analysis.
+labels: []
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, what did you expect, what did you get?
+      placeholder: |
+        Command: sbo ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.0.1 or a commit SHA"
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: This report does NOT ask for any automation of a Steam action (buy/sell/craft/trade/list/login). Badgewright is read-only by design.
+          required: true
