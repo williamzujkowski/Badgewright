@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+
+- `select_candidate_games` (plan-cheapest) now estimates unpriced slots at a conservative
+  **75th-percentile** proxy instead of the median, so a game where many cards are verified
+  cheap ranks ahead of a single-cheap-card gamble — a better predictor of which games are
+  actually cheap to complete (#81). Prioritization only; never affects reported costs.
+
 ### Added
 
 - **`sbo market plan-cheapest`** (Epic #71 #77/#69): turns the sweep machinery into a usable
