@@ -163,3 +163,10 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   absolute/`..`/symlinks, basename-only), JSON/zip size caps + schema validation, no
   user-supplied URL ever reaches the fetch client (host allowlist already blocks
   SSRF; also reject IP-literal/link-local). Fold into 2.3/3.1/7.x as those land.
+
+## Epic #71 — whole-catalog cheapest badges
+
+- [x] **#72** Tier-2 set-cost aggregation + `sbo market cheapest-badges` (liquidity-gated,
+  cost-per-XP, bottleneck flag; captures sell_price+sell_listings; PriceSnapshot.listings).
+- [ ] **#73** Bounded opt-in cheapest-first market sweep (the price source).
+- [ ] **#74** Tier-3 top-K depth enrichment.

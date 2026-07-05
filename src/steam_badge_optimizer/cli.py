@@ -651,5 +651,41 @@ def market_anomalies(
     typer.secho("\nResearch only. Anomalies are speculative; verify before any action.", dim=True)
 
 
+@market_app.command("cheapest-badges")
+def market_cheapest_badges(
+    top: int = typer.Option(20, help="Number of results."),
+    min_listings: int = typer.Option(2, help="Min asks per card to count a set as liquid."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Rank the cheapest badges to make from scratch, from cached prices. Never trades."""
+    from .analytics import rank_cheapest_badges
+    from .db import Store
+
+    if top <= 0:
+        typer.secho("--top must be positive.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        ranked = rank_cheapest_badges(
+            store, currency=settings.currency, min_listings=min_listings, top=top
+        )
+        names = {a.appid: a.name for a in store.list_apps()}
+    if not ranked:
+        typer.echo(
+            "No fully-known, priced badge sets yet. Discover + price cards first "
+            "(cards discover / prices refresh), or run a bulk market sweep."
+        )
+        return
+    typer.secho(f"Cheapest badges to make ({settings.currency}) — NOT trading advice:", bold=True)
+    for b in ranked:
+        game = names.get(b.appid, f"App {b.appid}")
+        liq = "" if b.liquid else "  ⚠ thin"
+        typer.echo(
+            f"  {b.total_cost.amount:>7.2f}  {game} (appid {b.appid}, {b.set_size} cards) "
+            f"[{b.confidence.value}]{liq}" + (f" — {'; '.join(b.signals)}" if b.signals else "")
+        )
+    typer.secho("\nResearch only. Buy cards manually in Steam.", dim=True)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

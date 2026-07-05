@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Cheapest-badges ranking** (`analytics.rank_cheapest_badges`, `sbo market cheapest-badges`,
+  Epic #71 Tier 2): ranks the cheapest badges to make from scratch (full single-set cost =
+  sum of each card's lowest ask), cost-per-XP, from cached prices. **Liquidity-gated** — a
+  set whose cards have fewer than N listings (ask-side depth) is flagged and can never rank
+  ahead of a liquid one, so a single-listing "cheap" badge can't masquerade as cheapest.
+  Flags one-card-dominates bottlenecks. Source-agnostic (works on discovery+pricing today,
+  the bulk market sweep next). Research only.
+- The market search parser now captures per-card `sell_price` (lowest ask) and
+  `sell_listings` (ask depth); `PriceSnapshot` gains a nullable `listings` field (schema v2).
+
 ## [0.6.0] - 2026-07-05
 
 Privacy hardening and two correctness fixes that live testing on a real account

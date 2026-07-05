@@ -229,8 +229,8 @@ class Store:
             """
             INSERT INTO price_snapshot
                 (appid, market_hash_name, lowest_cents, median_cents, currency, volume,
-                 fetched_at, source_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 listings, fetched_at, source_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 snap.item.appid,
@@ -239,6 +239,7 @@ class Store:
                 snap.median.cents if snap.median else None,
                 currency,
                 snap.volume,
+                snap.listings,
                 snap.source.fetched_at.isoformat(),
                 source_id,
             ),
@@ -342,7 +343,12 @@ class Store:
             http_status=r["s_http_status"],
         )
         return PriceSnapshot(
-            item=item, lowest=lowest, median=median, volume=r["volume"], source=source
+            item=item,
+            lowest=lowest,
+            median=median,
+            volume=r["volume"],
+            listings=r["listings"],
+            source=source,
         )
 
     def source_count(self) -> int:
