@@ -6,6 +6,14 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-05
+
+First stable release. Badgewright is feature-complete: find the cheapest Steam badges to
+make — across your own games or the whole market — with a bounded, opt-in, rate-polite
+pipeline that reads only public data and never touches your account. Documented end-to-end
+with a verified command reference, hardened (read-only boundary enforced in code, no stored
+credentials, non-root Docker), and covered by 373 tests.
+
 ## [0.11.0] - 2026-07-05
 
 Shareable output: export the cheapest-badges ranking as a spreadsheet-ready CSV or a
