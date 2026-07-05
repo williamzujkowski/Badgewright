@@ -1,12 +1,19 @@
 # Changelog
 
 All notable changes to this project are documented here. Format loosely follows
-[Keep a Changelog](https://keepachangelog.com/); the project uses semantic
-versioning once it reaches 1.0.
+[Keep a Changelog](https://keepachangelog.com/) and [SemVer](https://semver.org/)
+(pre-1.0: minor = new capability, patch = fixes).
 
 ## [Unreleased]
 
-### Added — Milestone 2 (in progress)
+## [0.1.0] - 2026-07-05
+
+First tagged release: the complete local, read-only **data layer** — every input the
+optimizer needs, with a structurally enforced no-automation boundary. Import a
+catalog, resolve a SteamID, ingest an inventory, and cache market prices; the
+optimizer and reports build on this next.
+
+### Added — Milestone 2 (data layer)
 
 - Inventory ingestion (`sources.steam_inventory`, `sbo inventory import`): parses the
   753/6 trading-card inventory (joins assets<->descriptions, sums duplicates, derives
