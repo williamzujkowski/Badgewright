@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-05
+
+Privacy hardening and two correctness fixes that live testing on a real account
+surfaced — the price fetcher and catalog default both now work against real Steam data.
+
 ### Fixed
 
 - Price fetching now queries the Community Market under **appid 753** (where trading
