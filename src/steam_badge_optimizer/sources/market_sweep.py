@@ -35,7 +35,12 @@ import orjson
 
 from ..models import Card, MarketItem, Money, PriceSnapshot
 from ..models.provenance import SourceKind, SourceRecord
-from .card_discovery import SEARCH_URL, _non_negative_int, parse_search_results
+from .card_discovery import (
+    SEARCH_URL,
+    _non_negative_int,
+    _raw_result_count,
+    parse_search_results,
+)
 from .http_client import FetchError, RateLimited, SafeClient
 
 if TYPE_CHECKING:
@@ -106,16 +111,6 @@ def _total_count(raw: bytes) -> int:
         return 0
     total = data.get("total_count") if isinstance(data, dict) else None
     return int(total) if isinstance(total, int) and total >= 0 else 0
-
-
-def _raw_result_count(raw: bytes) -> int:
-    """How many listings the server actually returned on this page (its real page size)."""
-    try:
-        data = orjson.loads(raw)
-    except orjson.JSONDecodeError:
-        return 0
-    results = data.get("results") if isinstance(data, dict) else None
-    return len(results) if isinstance(results, list) else 0
 
 
 def sweep_cheapest(

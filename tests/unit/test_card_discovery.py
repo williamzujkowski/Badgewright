@@ -124,14 +124,66 @@ class TestReconcileAndPersist:
             assert any("3 of 5" in n for n in result.notes)
 
     @respx.mock
-    def test_found_more_than_size_is_leakage_not_complete(self) -> None:
+    def test_found_more_than_catalog_ratchets_set_size_up(self) -> None:
+        # #79: a COMPLETE market enumeration finding more normal cards than the (stale)
+        # catalog corrects the stored set size UPWARD to market truth.
         respx.get(cd.SEARCH_URL).mock(
             return_value=httpx.Response(200, content=FIXTURE.read_bytes())
         )
         with Store.in_memory() as store, SafeClient() as c:
-            result = cd.import_cards(store, c, 440, set_size=2)  # found 3 normal > 2
-            assert result.complete is False
-            assert any("leakage" in n for n in result.notes)
+            result = cd.import_cards(store, c, 440, set_size=2)  # catalog 2, market 3
+            assert result.complete is True
+            assert result.normal_count == 3
+            stored = {b.appid: b.set_size for b in store.list_badge_sets()}
+            assert stored[440] == 3  # corrected upward and persisted
+
+
+class TestPagination:
+    @respx.mock
+    def test_enumerates_across_pages_by_actual_count(self) -> None:
+        # The endpoint caps a page below `count`; enumeration must advance by the ACTUAL
+        # returned count (else a >1-page set is under-discovered) and reach total_count.
+        def _entry(name: str) -> dict:
+            return {
+                "hash_name": name,
+                "sell_price": 5,
+                "sell_listings": 10,
+                "asset_description": {"type": "Trading Card"},
+            }
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            start = int(request.url.params.get("start", 0))
+            if start == 0:
+                cards = [_entry(f"440-C{i}") for i in range(4)]
+            elif start == 4:
+                cards = [_entry(f"440-C{i}") for i in range(4, 6)]
+            else:
+                cards = []
+            return httpx.Response(200, content=orjson.dumps({"total_count": 6, "results": cards}))
+
+        route = respx.get(cd.SEARCH_URL).mock(side_effect=handler)
+        with SafeClient(min_interval_s=0) as c:
+            cards, complete = cd._enumerate_cards(c, 440)
+        assert len(cards) == 6  # all cards across both pages
+        assert complete is True
+        starts = [int(call.request.url.params.get("start", 0)) for call in route.calls]
+        assert starts == [0, 4]  # advanced by ACTUAL count (4), not page_size
+
+
+class TestReconcileSetSize:
+    def test_ratchets_up_on_complete_market_undercount(self) -> None:
+        assert cd.reconcile_set_size(6, 7, True) == (7, True)  # Amber Throne 6 -> 7
+
+    def test_never_lowers_below_catalog_floor(self) -> None:
+        # Market undercount (a card with no listings) on a complete page must NOT lower it.
+        assert cd.reconcile_set_size(6, 5, True) == (6, False)
+
+    def test_no_change_when_incomplete_even_if_more_found(self) -> None:
+        # A truncated / page-capped enumeration is not authoritative -> never overwrite.
+        assert cd.reconcile_set_size(6, 7, False) == (6, False)
+
+    def test_no_change_when_equal(self) -> None:
+        assert cd.reconcile_set_size(6, 6, True) == (6, False)
 
     def test_import_from_file(self) -> None:
         with Store.in_memory() as store:
