@@ -64,6 +64,16 @@ def test_complete_badge_cost_and_math() -> None:
         assert badge.confidence is Confidence.LOW  # level was assumed
 
 
+def test_multi_unit_estimate_flagged_as_floor() -> None:
+    # Buying several copies walks the order book, so missing*lowest is only a floor;
+    # the badge must say so and not claim HIGH confidence.
+    with Store.in_memory() as store:
+        _seed_full_badge(store)  # missing 4-5 copies per card
+        badge = compute_costs(store, target_level=5).badges[0]
+        assert any("floor" in n for n in badge.notes)
+        assert badge.confidence is not Confidence.HIGH
+
+
 def test_crafts_needed_uses_current_level() -> None:
     with Store.in_memory() as store:
         _seed_full_badge(store)
