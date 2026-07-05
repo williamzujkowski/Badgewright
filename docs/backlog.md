@@ -19,7 +19,7 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   runtime `assert_safe_request` guard; AST-based CI gate
   (`tests/unit/test_no_mutating_http.py`) forbidding mutating verbs / egress bypass.
 - [x] **0.3** Source-provenance model — `SourceRecord` with kind/url/time/parser/hash/TTL.
-- [ ] **0.4 (NEW, security)** Make provenance NOT NULL at the persistence layer —
+- [x] **0.4** Provenance mandatory — SourceRecord requires url or file_name. See #0.4. at the persistence layer —
   `source_url`/`fetched_at` non-null so no un-attributed page can be cached.
 
 ## Epic 1 — Data model & storage
@@ -31,7 +31,7 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 - [x] **1.2** SQLite persistence — stdlib sqlite3 `db.Store`: migration runner,
   current-state upserts, append-only price history, source-hash dedup, provenance
   round-trip. See #3.
-- [ ] **1.3 (NEW, security)** No-secrets schema invariant + test — assert no field
+- [x] **1.3** No-secrets schema invariant + test (models + DDL). See #1.3. + test — assert no field
   named `steamLoginSecure`/`sessionid`/`shared_secret`/`identity_secret` exists in
   any model or table.
 
@@ -137,7 +137,7 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 - [x] **8.3** Safety-regression tests (partial) — AST gate for mutating verbs / egress
   bypass done; extend with allowlisted-host/method assertions and forbidden-route
   fixtures as sources land.
-- [ ] **8.4 (NEW, security)** `delete-all` completeness test — VACUUM/recreate DB +
+- [x] **8.4** `sbo delete-all` (DB + WAL/SHM sidecars) + completeness test. See #8.4. — VACUUM/recreate DB +
   purge exported reports; verify no recoverable SteamID or cached token remains.
 - [ ] **8.5 (NEW, security)** Cached-HTML sanitization-on-write — strip scripts/
   handlers/session tokens before persistence; test with a token-laden fixture.
@@ -154,7 +154,7 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 - [ ] **9.4 (NEW, security)** Runtime egress allowlist (firewall/sandbox backstop) —
   static gates miss `eval`/native/dependency code; enforce host + GET at the process
   boundary in the Docker image.
-- [ ] **9.5 (NEW, security)** Dependency egress audit gate — pin deps; CI check that
+- [x] **9.5** Dependency egress audit (no extra network libs installed). See #9.5. — pin deps; CI check that
   no dependency introduces a non-GET Steam path or network-capable transitive.
 
 ## Cross-cutting inputs

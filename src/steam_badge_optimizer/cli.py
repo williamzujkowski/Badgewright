@@ -88,6 +88,45 @@ def steamid_resolve(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("delete-all")
+def delete_all(
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Delete ALL local Badgewright data (the SQLite database and its journal files)."""
+    from pathlib import Path
+
+    settings = Settings.resolve(data_dir=data_dir)
+    db = settings.db_path
+    # The database plus any SQLite journal/WAL sidecars — a leftover SteamID or price in
+    # the -wal file would be a silent privacy failure, so purge them too.
+    targets = [Path(f"{db}{suffix}") for suffix in ("", "-wal", "-shm", "-journal")]
+    present = [p for p in targets if p.is_file()]
+
+    if not present:
+        typer.echo(f"No local data to delete at {settings.data_dir}.")
+        return
+    if not yes:
+        typer.secho(
+            f"This will permanently delete all local Badgewright data in {settings.data_dir}:",
+            fg=typer.colors.YELLOW,
+        )
+        for p in present:
+            typer.echo(f"  {p}")
+        if not typer.confirm("Continue?"):
+            typer.echo("Aborted.")
+            raise typer.Exit(code=1)
+
+    for p in present:
+        p.unlink()
+    typer.secho(f"Deleted {len(present)} file(s). Your local data is gone.", fg=typer.colors.GREEN)
+    typer.secho(
+        "Note: purchase-plan reports you exported with `report --out <path>` are not "
+        "tracked here — delete those files yourself if you want them gone.",
+        dim=True,
+    )
+
+
 @app.command()
 def init(
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),

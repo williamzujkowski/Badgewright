@@ -14,7 +14,7 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SourceKind(StrEnum):
@@ -44,6 +44,14 @@ class SourceRecord(BaseModel):
         if value is not None and not value.startswith(("http://", "https://")):
             raise ValueError(f"url must be http(s), got {value!r}")
         return value
+
+    @model_validator(mode="after")
+    def _require_attribution(self) -> SourceRecord:
+        # Every datum must be attributable: a source has a URL (fetched) or a file name
+        # (imported). fetched_at is already required. No un-attributed data (#0.4).
+        if self.url is None and self.file_name is None:
+            raise ValueError("a SourceRecord needs a url or a file_name (no un-attributed data)")
+        return self
 
     file_name: str | None = Field(
         default=None, description="Basename of the imported file, for manual imports."

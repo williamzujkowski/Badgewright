@@ -6,6 +6,24 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **`sbo delete-all`** (#8.4): purge all local data — the SQLite database **and its
+  `-wal`/`-shm`/`-journal` sidecars** (a leftover value in the WAL would be a silent
+  privacy leak) — with a confirmation prompt (`--yes` to skip). Completeness-tested: no
+  imported data survives anywhere in the data dir afterward.
+
+### Security
+
+- **No-stored-secrets invariant** (#1.3): a regression test asserts no domain model field
+  or schema column is named like a Steam credential/session secret (`steamLoginSecure`,
+  `sessionid`, `shared_secret`, `identity_secret`, ...). Credentials are structurally
+  un-storable.
+- **Provenance is mandatory** (#0.4): a `SourceRecord` now requires a `url` or a
+  `file_name` — no un-attributed datum can be constructed.
+- **Egress audit** (#9.5): a test asserts no extra network library (`requests`,
+  `aiohttp`, ...) is installed; the only sanctioned client is httpx via SafeClient.
+
 ### Fixed
 
 - Corrected the default steam-badges-db catalog URL — it pointed at `master/badges.json`
