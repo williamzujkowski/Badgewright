@@ -94,28 +94,51 @@ class TestEnrichmentOptIn:
         assert result.exit_code == 2
 
 
-class TestEnrichmentDemotesIlliquid:
+class TestEnrichment:
     @respx.mock
-    def test_zero_volume_demotes_a_seemingly_cheap_badge(self, tmp_path) -> None:
-        # Cards look liquid via 99 search listings, but real 24h volume is 0 -> after
-        # enrichment the badge must be flagged thin (not liquid).
+    def test_enrichment_adds_volume_and_keeps_well_asked_badge_liquid(self, tmp_path) -> None:
+        # The cards have 99 real asks (buyable). priceoverview reports volume=0 (no recent
+        # SALES). Buyability = asks, so the badge must STAY liquid — enrichment must not lose
+        # the 99-ask signal. It should, however, record the fetched 24h volume.
         respx.get(PRICEOVERVIEW).mock(return_value=_overview(volume="0"))
-        s = _seed(tmp_path)
+        s = _seed(tmp_path)  # cards priced with listings=99
         result = runner.invoke(
             app,
             [
-                "market",
-                "cheapest-badges",
-                "--enrich-top",
-                "1",
-                "--online",
-                "--confirm",
-                "--data-dir",
-                str(tmp_path),
+                "market", "cheapest-badges", "--enrich-top", "1",
+                "--online", "--confirm", "--data-dir", str(tmp_path),
             ],
         )
         assert result.exit_code == 0
-        assert "thin" in result.output.lower()  # real volume revealed the illiquidity
+        assert "thin" not in result.output.lower()  # 99 asks -> still buyable
+        assert "unknown" not in result.output.lower()  # listings signal preserved
         with Store(s.db_path) as store:
-            snap = store.latest_price(100, "100-A")
-            assert snap.volume == 0  # enriched with real 24h volume
+            assert store.latest_price(100, "100-A").volume == 0  # real 24h volume recorded
+
+    @respx.mock
+    def test_enrichment_never_lowers_reported_cost_via_median(self, tmp_path) -> None:
+        # priceoverview returns a low MEDIAN but NO current lowest ask. The cost must NOT drop
+        # to the unfillable median — the set has no current ask, so it becomes non-costable.
+        respx.get(PRICEOVERVIEW).mock(
+            return_value=httpx.Response(
+                200,
+                content=orjson.dumps(
+                    {"success": True, "median_price": "$0.01", "volume": "500"}  # no lowest_price
+                ),
+            )
+        )
+        _seed(tmp_path)  # baseline: liquid at 3+3 = $0.06
+        before = runner.invoke(
+            app, ["market", "cheapest-badges", "--data-dir", str(tmp_path)]
+        )
+        assert "0.06" in before.output  # offline baseline cost
+        after = runner.invoke(
+            app,
+            [
+                "market", "cheapest-badges", "--enrich-top", "1",
+                "--online", "--confirm", "--data-dir", str(tmp_path),
+            ],
+        )
+        assert after.exit_code == 0
+        # No current ask after enrichment -> the badge drops out, never re-priced at $0.02.
+        assert "0.02" not in after.output

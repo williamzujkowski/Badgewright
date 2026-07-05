@@ -147,6 +147,51 @@ class TestRankCheapestBadges:
                 _price(store, 1, n, 3)
             assert rank_cheapest_badges(store) == []
 
+    def test_median_only_card_is_not_costable(self) -> None:
+        # A median (past sale) with NO current lowest ask can't be filled -> set excluded.
+        with Store.in_memory() as store:
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=1))
+            store.upsert_card(Card(appid=1, market_hash_name="1-A"))
+            store.add_price_snapshot(
+                PriceSnapshot(
+                    item=MarketItem(appid=1, market_hash_name="1-A"),
+                    median=Money(3, "USD"),  # median only, no lowest ask
+                    listings=50,
+                    source=SourceRecord(
+                        kind=SourceKind.STEAM_MARKET,
+                        url="https://steamcommunity.com/market/priceoverview/",
+                        fetched_at=datetime.now(UTC),
+                        parser_version="1",
+                        raw_sha256=SourceRecord.sha256_of(b"m"),
+                        cache_ttl_seconds=86400,
+                    ),
+                )
+            )
+            assert rank_cheapest_badges(store) == []
+
+    def test_volume_rescues_thin_asks(self) -> None:
+        # 1 ask but high 24h volume -> buyable (best-of asks OR volume).
+        with Store.in_memory() as store:
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=1))
+            store.upsert_card(Card(appid=1, market_hash_name="1-A"))
+            store.add_price_snapshot(
+                PriceSnapshot(
+                    item=MarketItem(appid=1, market_hash_name="1-A"),
+                    lowest=Money(3, "USD"),
+                    listings=1,
+                    volume=500,
+                    source=SourceRecord(
+                        kind=SourceKind.STEAM_MARKET,
+                        url="https://steamcommunity.com/market/priceoverview/",
+                        fetched_at=datetime.now(UTC),
+                        parser_version="1",
+                        raw_sha256=SourceRecord.sha256_of(b"v"),
+                        cache_ttl_seconds=86400,
+                    ),
+                )
+            )
+            assert rank_cheapest_badges(store)[0].liquid is True
+
     def test_bottleneck_flagged(self) -> None:
         with Store.in_memory() as store:
             _seed_set(store, 1, [5, 95])  # one card is 95% of cost
