@@ -1,6 +1,6 @@
 [project]
 name = "steam-badge-optimizer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Badgewright — a local-first, read-only Steam trading-card badge optimizer and market-intelligence tool. Plans; never automates."
 readme = "README.md"
 requires-python = ">=3.12"

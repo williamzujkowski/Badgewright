@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
+Makes the optimizer broadly useful and adds market research. **Card-name discovery**
+means badges become costable instead of stuck "incomplete", and **market intelligence**
+surfaces liquidity-weighted price-weakness signals — still entirely local, read-only,
+and never trading advice.
+
 ### Added
 
 - **Market intelligence** (`analytics.market_scan`, `sbo market scan-weakness` /
