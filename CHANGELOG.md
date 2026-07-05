@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-05
+
+Shareable output: export the cheapest-badges ranking as a spreadsheet-ready CSV or a
+static, inert HTML page for human review.
+
 ### Added
 
 - **`sbo report cheapest-badges --out <path.csv|.html>`** (#70): export the cheapest-badges
