@@ -105,8 +105,14 @@ class TestEnrichment:
         result = runner.invoke(
             app,
             [
-                "market", "cheapest-badges", "--enrich-top", "1",
-                "--online", "--confirm", "--data-dir", str(tmp_path),
+                "market",
+                "cheapest-badges",
+                "--enrich-top",
+                "1",
+                "--online",
+                "--confirm",
+                "--data-dir",
+                str(tmp_path),
             ],
         )
         assert result.exit_code == 0
@@ -128,15 +134,19 @@ class TestEnrichment:
             )
         )
         _seed(tmp_path)  # baseline: liquid at 3+3 = $0.06
-        before = runner.invoke(
-            app, ["market", "cheapest-badges", "--data-dir", str(tmp_path)]
-        )
+        before = runner.invoke(app, ["market", "cheapest-badges", "--data-dir", str(tmp_path)])
         assert "0.06" in before.output  # offline baseline cost
         after = runner.invoke(
             app,
             [
-                "market", "cheapest-badges", "--enrich-top", "1",
-                "--online", "--confirm", "--data-dir", str(tmp_path),
+                "market",
+                "cheapest-badges",
+                "--enrich-top",
+                "1",
+                "--online",
+                "--confirm",
+                "--data-dir",
+                str(tmp_path),
             ],
         )
         assert after.exit_code == 0
