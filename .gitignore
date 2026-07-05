@@ -26,3 +26,7 @@ badgewright.sqlite3
 .idea/
 .DS_Store
 .nexus-agents/
+
+# nexus-agents MCP working artifacts (not part of this repo)
+docs/research/registry/
+.nexus/
