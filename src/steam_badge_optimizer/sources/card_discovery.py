@@ -5,12 +5,13 @@ name. Inventory only reveals the cards a user owns, so most sets stay "incomplet
 This module enumerates a game's full card list from the Steam Community Market search
 endpoint (a read-only GET), so the cost calculator can cost those sets.
 
-Fail-closed (per the approving vote):
+Fail-closed (per the approving votes):
 
-* Only when the discovered **normal** card count equals the catalog ``set_size`` is the
-  set marked fully known. ``found < size`` leaves it incomplete; ``found > size`` is a
-  signal-quality problem (foil/filter leakage), not completion — discovery never
-  overrides the catalog and never invents a missing card name.
+* ``found < size`` leaves the set incomplete; discovery never invents a missing card name.
+* ``found > size`` on a *provably complete* market enumeration corrects the set size UPWARD
+  to market truth (the static catalog undercounts as games add cards) — but the catalog is
+  always a FLOOR: a market undercount (a real card with no live listings) never lowers it
+  (#79, ``reconcile_set_size``).
 * Foils are excluded from the set count via both the card ``type`` and a ``(Foil)`` name
   check. Discovered foils are still stored (flagged) for later foil support.
 
@@ -26,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 import orjson
 
-from ..models import Card
+from ..models import BadgeSet, Card
 from ..models.provenance import SourceKind, SourceRecord
 from .http_client import SafeClient
 
@@ -42,6 +43,7 @@ __all__ = [
     "import_cards",
     "import_from_file",
     "parse_search_results",
+    "reconcile_set_size",
 ]
 
 SEARCH_URL = "https://steamcommunity.com/market/search/render/"
@@ -50,6 +52,7 @@ CATALOG_TTL_SECONDS = 7 * 24 * 3600  # a set's card list rarely changes
 PAGE_SIZE = 100
 MAX_PAGES = 5
 MAX_BYTES = 8 * 1024 * 1024
+MAX_SET_SIZE = 100  # sane ceiling (matches BadgeSet's bound); above this is a filter leak
 
 
 class CardDiscoveryError(ValueError):
@@ -133,22 +136,39 @@ def _total_count(raw: bytes) -> int:
     except orjson.JSONDecodeError:
         return 0
     total = data.get("total_count") if isinstance(data, dict) else None
-    return int(total) if isinstance(total, int) else 0
+    # Guard against a negative/absent count firing a premature "complete" (parity with sweep).
+    return int(total) if isinstance(total, int) and total >= 0 else 0
 
 
-def discover_cards(
+def _raw_result_count(raw: bytes) -> int:
+    """How many listings the server actually returned on this page (its real page size)."""
+    try:
+        data = orjson.loads(raw)
+    except orjson.JSONDecodeError:
+        return 0
+    results = data.get("results") if isinstance(data, dict) else None
+    return len(results) if isinstance(results, list) else 0
+
+
+def _enumerate_cards(
     client: SafeClient,
     appid: int,
     *,
     max_pages: int = MAX_PAGES,
     page_size: int = PAGE_SIZE,
-) -> list[DiscoveredCard]:
-    """Enumerate a game's trading cards via the market search endpoint (paginated)."""
+) -> tuple[list[DiscoveredCard], bool]:
+    """Enumerate a game's cards; also report whether the market was FULLY enumerated.
+
+    ``complete`` is True only when we paged all the way to the reported ``total_count``
+    (or an empty page) — NOT when we merely hit the page-count cap — so callers can trust
+    a complete enumeration as the authoritative card list.
+    """
     if not isinstance(appid, int) or appid <= 0:
         raise ValueError(f"appid must be a positive int, got {appid!r}")
 
     found: dict[str, DiscoveredCard] = {}
     start = 0
+    complete = False
     for _ in range(max_pages):
         params: dict[str, Any] = {
             "norender": 1,
@@ -161,15 +181,47 @@ def discover_cards(
         }
         resp = client.get(SEARCH_URL, params=params, max_bytes=MAX_BYTES)
         raw = resp.content
+        total = _total_count(raw)
         page = parse_search_results(raw)
         before = len(found)
         for card in page:
             found.setdefault(card.market_hash_name, card)
-        start += page_size
-        # Stop at the reported end, or if a page added nothing new (defensive).
-        if start >= _total_count(raw) or (page and len(found) == before):
+        # Advance by the ACTUAL page size the server returned (search/render caps ~10/page
+        # regardless of `count`), else we'd skip most cards of a >10-card set.
+        raw_count = _raw_result_count(raw)
+        start += raw_count if raw_count > 0 else page_size
+        if raw_count == 0 or (total and start >= total):
+            complete = True  # reached the reported end — a provably full enumeration
             break
-    return list(found.values())
+        if page and len(found) == before:
+            break  # defensive: no new cards, but NOT a provably-complete stop
+    return list(found.values()), complete
+
+
+def discover_cards(
+    client: SafeClient,
+    appid: int,
+    *,
+    max_pages: int = MAX_PAGES,
+    page_size: int = PAGE_SIZE,
+) -> list[DiscoveredCard]:
+    """Enumerate a game's trading cards via the market search endpoint (paginated)."""
+    return _enumerate_cards(client, appid, max_pages=max_pages, page_size=page_size)[0]
+
+
+def reconcile_set_size(
+    catalog_size: int, discovered_normal_count: int, complete_enumeration: bool
+) -> tuple[int, bool]:
+    """The authoritative set size, ratcheting UP toward market truth only (#79).
+
+    The static catalog can undercount (games add cards); the live market can undercount
+    too (a real card with no active listings is invisible). So we RAISE ``set_size`` only
+    when a *provably complete* market enumeration finds MORE normal cards than the catalog,
+    and never lower it below the catalog floor. Returns (size, changed).
+    """
+    if complete_enumeration and discovered_normal_count > catalog_size:
+        return discovered_normal_count, True
+    return catalog_size, False
 
 
 def _reconcile(appid: int, set_size: int, cards: list[DiscoveredCard]) -> DiscoveryResult:
@@ -213,9 +265,16 @@ def _persist(store: Store, result: DiscoveryResult, source: SourceRecord) -> Non
 def import_cards(
     store: Store, client: SafeClient, appid: int, set_size: int, **kwargs: Any
 ) -> DiscoveryResult:
-    """Discover and persist a game's card names via the market search endpoint."""
-    cards = discover_cards(client, appid, **kwargs)
-    result = _reconcile(appid, set_size, cards)
+    """Discover and persist a game's card names via the market search endpoint.
+
+    When a *complete* market enumeration finds more normal cards than the (possibly stale)
+    catalog says, the badge set size is corrected upward to the market truth (#79).
+    """
+    cards, complete = _enumerate_cards(client, appid, **kwargs)
+    prefix = f"{appid}-"
+    normal_count = sum(1 for c in cards if c.market_hash_name.startswith(prefix) and not c.is_foil)
+    size, changed = reconcile_set_size(set_size, normal_count, complete)
+    result = _reconcile(appid, size, cards)
     source = SourceRecord(
         kind=SourceKind.STEAM_MARKET_SEARCH,
         url=SEARCH_URL,
@@ -225,6 +284,11 @@ def import_cards(
         cache_ttl_seconds=CATALOG_TTL_SECONDS,
     )
     _persist(store, result, source)
+    if changed and 1 <= size <= MAX_SET_SIZE:
+        # Persist the market-authoritative set size so every consumer (ranking, selection,
+        # completeness) uses the corrected count, not the stale catalog value. A count above
+        # the sane ceiling is a filter leak, not a real set — never persist it.
+        store.upsert_badge_set(BadgeSet(appid=appid, set_size=size), source)
     return result
 
 

@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Set-size authority** (#79): a *provably complete* market discovery that finds more
+  normal cards than the (stale) steam-badges-db catalog now corrects the stored badge
+  `set_size` UPWARD to market truth — the catalog is only a floor, never lowered on a market
+  undercount. Fixes badges that were dropped on a catalog/market count mismatch (e.g. The
+  Amber Throne: catalog 6, market 7). Every downstream consumer (discovery completeness,
+  cheapest-badges ranking, candidate selection) now uses the corrected size.
+- Card discovery pagination now advances by the actual page size the endpoint returns
+  (~10/page, not the requested 100), so games with more than ~10 cards are fully enumerated
+  instead of silently truncated.
+
 ## [0.8.0] - 2026-07-05
 
 Targeted completion: `sbo market plan-cheapest` finishes the most promising cheap games
