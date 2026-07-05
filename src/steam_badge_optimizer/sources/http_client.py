@@ -160,7 +160,10 @@ class SafeClient:
         try:
             return retryer(self._do_get, request_url, max_bytes)
         except httpx.TransportError as exc:  # exhausted retries
-            raise FetchError(f"transport error fetching {redact_url(url)}: {exc}") from exc
+            # Redact the wrapped httpx message too — it can echo the request URL.
+            raise FetchError(
+                f"transport error fetching {redact_url(url)}: {redact_url(exc)}"
+            ) from exc
 
     def _do_get(self, request_url: httpx.URL, max_bytes: int | None) -> SafeResponse:
         self._respect_min_interval()
