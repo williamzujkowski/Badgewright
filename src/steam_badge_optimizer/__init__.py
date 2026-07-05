@@ -4,4 +4,4 @@ This package plans; it never operates a Steam account. See :mod:`steam_badge_opt
 for the structural read-only boundary and ``docs/adr/0001-safety-boundary.md`` for the rationale.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
