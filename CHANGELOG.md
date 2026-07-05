@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-05
+
+Data-layer correctness: the live market is now authoritative for how many cards a badge
+needs, so a stale catalog no longer drops or mis-costs badges.
+
 ### Fixed
 
 - **Set-size authority** (#79): a *provably complete* market discovery that finds more
