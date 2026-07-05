@@ -223,6 +223,49 @@ class Store:
         rows = self.conn.execute("SELECT * FROM steam_app ORDER BY appid").fetchall()
         return [SteamApp(appid=r["appid"], name=r["name"]) for r in rows]
 
+    def list_badge_sets(self) -> list[BadgeSet]:
+        rows = self.conn.execute("SELECT appid, set_size FROM badge_set ORDER BY appid").fetchall()
+        return [BadgeSet(appid=r["appid"], set_size=r["set_size"]) for r in rows]
+
+    def get_badge_progress(self, appid: int, *, is_foil: bool = False) -> UserBadgeProgress | None:
+        row = self.conn.execute(
+            "SELECT appid, is_foil, level FROM user_badge_progress WHERE appid = ? AND is_foil = ?",
+            (appid, int(is_foil)),
+        ).fetchone()
+        if row is None:
+            return None
+        return UserBadgeProgress(
+            appid=row["appid"], level=row["level"], is_foil=bool(row["is_foil"])
+        )
+
+    def cards_for_app(self, appid: int, *, include_foil: bool = False) -> list[Card]:
+        query = "SELECT * FROM card WHERE appid = ?"
+        params: tuple[object, ...] = (appid,)
+        if not include_foil:
+            query += " AND is_foil = 0"
+        query += " ORDER BY market_hash_name"
+        rows = self.conn.execute(query, params).fetchall()
+        return [
+            Card(
+                appid=r["appid"],
+                market_hash_name=r["market_hash_name"],
+                card_name=r["card_name"],
+                is_foil=bool(r["is_foil"]),
+                marketable=bool(r["marketable"]),
+                tradable=bool(r["tradable"]),
+            )
+            for r in rows
+        ]
+
+    def inventory_for_app(self, appid: int, *, is_foil: bool = False) -> dict[str, int]:
+        """Owned copies keyed by market hash name for a game's (non-foil) cards."""
+        rows = self.conn.execute(
+            "SELECT market_hash_name, quantity FROM user_card_inventory "
+            "WHERE appid = ? AND is_foil = ?",
+            (appid, int(is_foil)),
+        ).fetchall()
+        return {r["market_hash_name"]: r["quantity"] for r in rows}
+
     def list_card_items(self) -> list[MarketItem]:
         """All known cards as MarketItems (the set the price fetcher can refresh)."""
         rows = self.conn.execute(
