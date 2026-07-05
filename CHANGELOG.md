@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-05
+
+Targeted completion: `sbo market plan-cheapest` finishes the most promising cheap games
+into a real ranked list of cheapest badges, on a small bounded request budget.
+
 ### Changed
 
 - `select_candidate_games` (plan-cheapest) now estimates unpriced slots at a conservative
