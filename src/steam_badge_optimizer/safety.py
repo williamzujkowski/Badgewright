@@ -87,6 +87,11 @@ FORBIDDEN_PATH_FRAGMENTS: frozenset[str] = frozenset(
         "craftbadge",
         "gcgotocard",
         "consumeitem",
+        # Trade surfaces. Path-anchored with a leading slash so a card *name* containing
+        # "trade" (e.g. "Trade Federation") in a query string can't false-positive a
+        # legitimate price fetch — only the /tradeoffer(s)/ path matches.
+        "/tradeoffer",
+        "/trade/",
     }
 )
 
