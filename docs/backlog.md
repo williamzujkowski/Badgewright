@@ -37,8 +37,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 ## Epic 2 — Steam identity & user-data ingestion
 
-- [ ] **2.1** Manual SteamID input — accept SteamID64 / vanity URL / profile URL,
-  normalize to SteamID64, useful errors on invalid input.
+- [x] **2.1** SteamID input — SteamID64 / profile URL / vanity (resolved via profile
+  XML through SafeClient); hostile vanity rejected pre-network. See #4.
 - [ ] **2.2** OpenID login helper — identity only; **verify signature via
   `check_authentication`**; discard response, keep only SteamID64; isolated ephemeral
   cookie context wiped after extraction (see 2.5).

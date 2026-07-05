@@ -67,6 +67,33 @@ def safety_boundary() -> None:
     typer.echo("  See docs/adr/0001-safety-boundary.md for the full rationale.")
 
 
+@app.command("steamid")
+def steamid_resolve(
+    value: str = typer.Argument(..., help="SteamID64, profile URL, or vanity name."),
+    online: bool = typer.Option(False, help="Allow a network lookup for vanity names."),
+) -> None:
+    """Resolve a SteamID64 from an id, profile URL, or vanity name (read-only)."""
+    from .sources.http_client import SafeClient
+    from .sources.steamid import SteamIdError, parse_offline, resolve_steamid
+
+    offline = parse_offline(value)
+    if offline is not None:
+        typer.echo(str(offline))
+        return
+    if not online:
+        typer.secho(
+            "That looks like a vanity name; resolving it needs the network (--online).",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(code=2)
+    try:
+        with SafeClient() as client:
+            typer.echo(str(resolve_steamid(value, client)))
+    except SteamIdError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+
 @app.command()
 def init(
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),

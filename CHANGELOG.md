@@ -8,6 +8,11 @@ versioning once it reaches 1.0.
 
 ### Added — Milestone 2 (in progress)
 
+- SteamID resolution (`sources.steamid`, `sbo steamid`): accepts a raw SteamID64,
+  a profile URL, or a vanity name (resolved via the public profile XML through
+  SafeClient — no API key, no login). Hostile vanity input is rejected before any
+  request.
+
 - Market price fetcher (`sources.steam_market`, `sbo prices refresh`): fetches the
   unofficial `priceoverview` via SafeClient, parses localized lowest/median into
   `Money` + volume, persists a `PriceSnapshot` with TTL, reuses fresh cached prices,
