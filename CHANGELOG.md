@@ -6,6 +6,23 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **`sbo market plan-cheapest`** (Epic #71 #77/#69): turns the sweep machinery into a usable
+  answer. From cached cheap prices (seed with `sbo market sweep`) it picks the games
+  cheapest to FINISH — ranked by estimated completion cost (known prices + a median proxy
+  for unpriced slots, so one cheap card can't fake a cheap set) — then discovers + prices
+  just those `--max-games` sets and ranks the cheapest badges. Off by default (needs
+  `--online` and `--confirm`), rate-polite, bounded, hard-stops on rate-limit. Reuses the
+  existing per-game discovery + pricing.
+
+### Changed
+
+- `rank_cheapest_badges` now trusts the market card list: it ranks a set when the discovered
+  cards (>= the catalog count) are all priced, costing ALL of them (conservative) and
+  flagging any catalog/market count mismatch — instead of dropping the badge on an exact
+  mismatch (#79).
+
 ## [0.7.0] - 2026-07-05
 
 Whole-catalog cheapest badges (Epic #71): rank the cheapest badges to make across all of

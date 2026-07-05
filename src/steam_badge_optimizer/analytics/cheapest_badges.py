@@ -63,7 +63,11 @@ def rank_cheapest_badges(
     for badge_set in store.list_badge_sets():
         appid = badge_set.appid
         cards = store.cards_for_app(appid, include_foil=False)
-        if len(cards) != badge_set.set_size or badge_set.set_size == 0:
+        # Need at least the catalog's card count, and (below) every discovered card priced.
+        # The market is authoritative for the actual card list — some games legitimately have
+        # more normal cards than the (sometimes stale) catalog count, so we cost ALL of them
+        # (conservative: never under-costs) rather than dropping the badge on an exact mismatch.
+        if badge_set.set_size == 0 or len(cards) < badge_set.set_size:
             continue  # not fully known — can't cost the whole set
 
         unit_cents: list[int] = []
@@ -86,6 +90,11 @@ def rank_cheapest_badges(
 
         total = sum(unit_cents)
         signals: list[str] = []
+        if len(cards) != badge_set.set_size:
+            signals.append(
+                f"market has {len(cards)} cards; catalog says {badge_set.set_size} "
+                "(costing all market cards)"
+            )
         known_liq = [x for x in liquidity if x is not None]
         min_liq = min(known_liq) if known_liq else None
         any_unknown = any(x is None for x in liquidity)
@@ -109,7 +118,7 @@ def rank_cheapest_badges(
         out.append(
             BadgeSetCost(
                 appid=appid,
-                set_size=badge_set.set_size,
+                set_size=len(cards),  # the actual number of cards costed (market truth)
                 total_cost=Money(total, currency),
                 cost_per_xp_cents=total / XP_PER_BADGE_LEVEL,
                 min_liquidity=min_liq,

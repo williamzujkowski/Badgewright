@@ -124,6 +124,29 @@ class TestRankCheapestBadges:
             _price(store, 1, "1-A", 10)  # 1-B has no price
             assert rank_cheapest_badges(store) == []
 
+    def test_market_has_more_cards_than_catalog_still_ranks(self) -> None:
+        # Catalog says 2 but the market has 3 normal cards, all priced: cost all 3, rank it,
+        # and flag the discrepancy (don't drop the badge on an exact-count mismatch).
+        with Store.in_memory() as store:
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=2))  # catalog: 2
+            for i, cents in enumerate([3, 4, 5]):  # market: 3 cards
+                name = f"1-C{i}"
+                store.upsert_card(Card(appid=1, market_hash_name=name))
+                _price(store, 1, name, cents)
+            ranked = rank_cheapest_badges(store)
+            assert len(ranked) == 1
+            assert ranked[0].total_cost == Money(12, "USD")  # 3+4+5, all three costed
+            assert ranked[0].set_size == 3
+            assert any("market has 3" in s for s in ranked[0].signals)
+
+    def test_partial_discovery_below_catalog_excluded(self) -> None:
+        with Store.in_memory() as store:
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=5))  # catalog: 5
+            for n in ("1-A", "1-B"):  # only 2 discovered -> can't cost the whole set
+                store.upsert_card(Card(appid=1, market_hash_name=n))
+                _price(store, 1, n, 3)
+            assert rank_cheapest_badges(store) == []
+
     def test_bottleneck_flagged(self) -> None:
         with Store.in_memory() as store:
             _seed_set(store, 1, [5, 95])  # one card is 95% of cost
