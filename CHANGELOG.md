@@ -8,6 +8,16 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
+- **Purchase-plan reports** (`sbo report purchase-plan --format csv|html --out FILE`,
+  Epic 7): export the optimizer plan for manual review. CSV has machine-readable columns
+  and defends against spreadsheet formula injection (a leading `= + - @ |`, even after
+  whitespace, is single-quote-prefixed). HTML is a self-contained **inert** document —
+  no scripts, no event handlers, no active URL schemes, strict CSP, every value
+  HTML-escaped, links only to informational market pages — enforced in code by
+  `assert_inert_html` before the file is written (fail closed), not just by tests.
+
+### Added
+
 - **Greedy optimizer + `sbo optimize`** (Epic 5.2): ranks complete badges by
   cost-per-XP and fills to a `--budget` and/or an account-`--target-level` (via the
   Steam XP step function), explaining chosen vs skipped, surfacing ready-to-craft and
