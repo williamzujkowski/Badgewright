@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-05
+
+Accuracy and research depth: plans now use your **real badge levels**, the cost model is
+**honest about multi-copy under-budgeting**, and market research gains **historical
+anomaly detection** — all still local, read-only, and never trading advice.
+
 ### Added
 
 - **Historical price-anomaly detection** (`analytics.anomalies`, `sbo market anomalies`,
