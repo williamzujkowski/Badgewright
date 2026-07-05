@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-05
+
+The **MVP optimizer**: ask "what's the cheapest way to gain levels?" and get a ranked,
+explainable, manually-actionable plan you can export — entirely from local data, with a
+structurally enforced no-automation boundary.
+
 ### Added
 
 - **Purchase-plan reports** (`sbo report purchase-plan --format csv|html --out FILE`,
