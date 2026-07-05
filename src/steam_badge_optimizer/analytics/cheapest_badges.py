@@ -57,6 +57,8 @@ def rank_cheapest_badges(
     """
     if top <= 0:
         raise ValueError("top must be positive")
+    if min_listings < 1:
+        raise ValueError("min_listings must be >= 1 (a threshold of 0 would trust every set)")
     out: list[BadgeSetCost] = []
     for badge_set in store.list_badge_sets():
         appid = badge_set.appid
@@ -86,9 +88,12 @@ def rank_cheapest_badges(
         signals: list[str] = []
         known_liq = [x for x in liquidity if x is not None]
         min_liq = min(known_liq) if known_liq else None
-        liquid = min_liq is not None and min_liq >= min_listings
-        if min_liq is None:
-            signals.append("liquidity unknown (no listings/volume data)")
+        any_unknown = any(x is None for x in liquidity)
+        # A set is liquid only if EVERY card is known-and-liquid — a card with no depth
+        # data is unbuyable-until-proven, so it must NOT be silently excluded from the gate.
+        liquid = not any_unknown and all(x >= min_listings for x in known_liq)
+        if any_unknown:
+            signals.append("liquidity unknown for a card — can't confirm it's buyable")
         elif not liquid:
             signals.append(f"thin: a card has only {min_liq} listing(s) (< {min_listings}) — risky")
 

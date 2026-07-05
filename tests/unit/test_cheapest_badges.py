@@ -134,3 +134,51 @@ class TestRankCheapestBadges:
     def test_top_must_be_positive(self) -> None:
         with Store.in_memory() as store, pytest.raises(ValueError):
             rank_cheapest_badges(store, top=0)
+
+    def test_min_listings_below_one_rejected(self) -> None:
+        with Store.in_memory() as store, pytest.raises(ValueError):
+            rank_cheapest_badges(store, min_listings=0)
+
+    def test_unknown_liquidity_card_makes_set_not_liquid(self) -> None:
+        # A card with NO listings/volume data must not be silently excluded from the gate
+        # (else an unbuyable-but-cheap set could rank top). The whole set is not-liquid.
+        with Store.in_memory() as store:
+            store.upsert_badge_set(BadgeSet(appid=100, set_size=2))
+            store.upsert_card(Card(appid=100, market_hash_name="100-A"))
+            store.upsert_card(Card(appid=100, market_hash_name="100-B"))
+            _price(store, 100, "100-A", 1, listings=500)  # liquid card
+            _price(store, 100, "100-B", 1, listings=None)  # unknown depth (and volume None)
+            _seed_set(store, 200, [9, 9], listings=500)  # genuinely liquid, pricier
+            ranked = rank_cheapest_badges(store, min_listings=2)
+            assert ranked[0].appid == 200  # the unknown-liquidity cheap set does NOT win
+            unknown = next(b for b in ranked if b.appid == 100)
+            assert unknown.liquid is False
+            assert any("unknown" in s for s in unknown.signals)
+
+
+class TestMigrationUpgrade:
+    def test_populated_v1_db_upgrades_to_v2_nondestructively(self, tmp_path) -> None:
+        # An existing user's v1 database (no `listings` column) must gain it on next open,
+        # preserving its rows. Build a real v1 DB, then reopen via Store.
+        import sqlite3
+
+        from steam_badge_optimizer.db.schema import MIGRATIONS, apply_migrations, schema_version
+
+        db = tmp_path / "v1.sqlite3"
+        raw = sqlite3.connect(str(db), isolation_level=None)
+        raw.execute("BEGIN")
+        for stmt in MIGRATIONS[0]:  # apply ONLY v1
+            raw.execute(stmt)
+        raw.execute("PRAGMA user_version = 1")
+        raw.execute("COMMIT")
+        raw.execute("INSERT INTO steam_app (appid, name) VALUES (440, 'Team Fortress 2')")
+        raw.close()
+
+        with Store(db) as store:  # reopen: migrations run
+            assert schema_version(store.conn) == len(MIGRATIONS)  # now v2
+            cols = {r[1] for r in store.conn.execute("PRAGMA table_info(price_snapshot)")}
+            assert "listings" in cols
+            assert store.get_app(440) is not None  # old data preserved
+        with Store(db) as store2:  # idempotent second open
+            apply_migrations(store2.conn)
+            assert store2.get_app(440) is not None
