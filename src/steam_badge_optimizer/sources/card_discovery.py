@@ -52,6 +52,7 @@ CATALOG_TTL_SECONDS = 7 * 24 * 3600  # a set's card list rarely changes
 PAGE_SIZE = 100
 MAX_PAGES = 5
 MAX_BYTES = 8 * 1024 * 1024
+MAX_SET_SIZE = 100  # sane ceiling (matches BadgeSet's bound); above this is a filter leak
 
 
 class CardDiscoveryError(ValueError):
@@ -135,7 +136,8 @@ def _total_count(raw: bytes) -> int:
     except orjson.JSONDecodeError:
         return 0
     total = data.get("total_count") if isinstance(data, dict) else None
-    return int(total) if isinstance(total, int) else 0
+    # Guard against a negative/absent count firing a premature "complete" (parity with sweep).
+    return int(total) if isinstance(total, int) and total >= 0 else 0
 
 
 def _raw_result_count(raw: bytes) -> int:
@@ -282,9 +284,10 @@ def import_cards(
         cache_ttl_seconds=CATALOG_TTL_SECONDS,
     )
     _persist(store, result, source)
-    if changed:
+    if changed and 1 <= size <= MAX_SET_SIZE:
         # Persist the market-authoritative set size so every consumer (ranking, selection,
-        # completeness) uses the corrected count, not the stale catalog value.
+        # completeness) uses the corrected count, not the stale catalog value. A count above
+        # the sane ceiling is a filter leak, not a real set — never persist it.
         store.upsert_badge_set(BadgeSet(appid=appid, set_size=size), source)
     return result
 

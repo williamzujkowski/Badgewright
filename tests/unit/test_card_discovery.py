@@ -169,6 +169,23 @@ class TestPagination:
         starts = [int(call.request.url.params.get("start", 0)) for call in route.calls]
         assert starts == [0, 4]  # advanced by ACTUAL count (4), not page_size
 
+    @respx.mock
+    def test_max_pages_truncation_is_not_complete(self) -> None:
+        # A set bigger than max_pages can fetch must report complete=False (never ratchet).
+        def _entry(name: str) -> dict:
+            return {"hash_name": name, "asset_description": {"type": "Trading Card"}}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            start = int(request.url.params.get("start", 0))
+            cards = [_entry(f"440-C{start}")]  # 1 card/page, total_count 999 (never reached)
+            return httpx.Response(200, content=orjson.dumps({"total_count": 999, "results": cards}))
+
+        respx.get(cd.SEARCH_URL).mock(side_effect=handler)
+        with SafeClient(min_interval_s=0) as c:
+            cards, complete = cd._enumerate_cards(c, 440, max_pages=3)
+        assert complete is False  # exhausted the page budget, did NOT reach total_count
+        assert len(cards) == 3  # only what the budget allowed
+
 
 class TestReconcileSetSize:
     def test_ratchets_up_on_complete_market_undercount(self) -> None:
@@ -184,6 +201,33 @@ class TestReconcileSetSize:
 
     def test_no_change_when_equal(self) -> None:
         assert cd.reconcile_set_size(6, 6, True) == (6, False)
+
+    @respx.mock
+    def test_foils_do_not_inflate_the_ratchet(self) -> None:
+        # A page with 2 normal + several foils must ratchet on the NORMAL count only, not
+        # let foils fake a larger set.
+        def _entry(name: str, foil: bool) -> dict:
+            t = "Foil Trading Card" if foil else "Trading Card"
+            return {"hash_name": name, "sell_price": 5, "asset_description": {"type": t}}
+
+        body = orjson.dumps(
+            {
+                "total_count": 5,
+                "results": [
+                    _entry("440-A", False),
+                    _entry("440-B", False),
+                    _entry("440-A (Foil)", True),
+                    _entry("440-B (Foil)", True),
+                    _entry("440-C (Foil)", True),
+                ],
+            }
+        )
+        respx.get(cd.SEARCH_URL).mock(return_value=httpx.Response(200, content=body))
+        with Store.in_memory() as store, SafeClient(min_interval_s=0) as c:
+            store.upsert_badge_set(BadgeSet(appid=440, set_size=2))  # catalog
+            cd.import_cards(store, c, 440, set_size=2)  # 2 normal + 3 foil discovered
+            stored = {b.appid: b.set_size for b in store.list_badge_sets()}
+            assert stored[440] == 2  # foils excluded -> normal count == catalog -> no ratchet
 
     def test_import_from_file(self) -> None:
         with Store.in_memory() as store:
