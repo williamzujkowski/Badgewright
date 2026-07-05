@@ -135,6 +135,11 @@ def compute_costs(
                 uncostable = True
                 notes.append(f"{card.market_hash_name} has no cached price")
                 continue
+            if unit.currency != currency:
+                # Fail closed: never sum a foreign-currency price into this total.
+                uncostable = True
+                notes.append(f"{card.market_hash_name} priced in {unit.currency}, not {currency}")
+                continue
             if snap is not None and snap.is_stale():
                 any_stale = True
             if snap is not None and (snap.volume is None or snap.volume < min_volume):
@@ -154,6 +159,11 @@ def compute_costs(
             notes.append(
                 f"{cards_unknown} of {badge_set.set_size} card names unknown "
                 "(needs inventory/card-name discovery)"
+            )
+        elif cards_unknown < 0:
+            notes.append(
+                f"{len(known_names)} known cards exceed catalog set size "
+                f"{badge_set.set_size} (data mismatch); treated as incomplete"
             )
 
         complete = cards_unknown == 0 and not uncostable and crafts_needed > 0

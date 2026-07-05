@@ -120,6 +120,79 @@ def test_maxed_badge_excluded_from_complete() -> None:
         assert report.complete_badges() == []  # nothing to do
 
 
+def test_foreign_currency_price_forces_incomplete() -> None:
+    # A EUR-priced card must NOT be summed into a USD total (fail closed).
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=440, set_size=1))
+        store.upsert_card(Card(appid=440, market_hash_name="440-A"))
+        store.add_price_snapshot(
+            PriceSnapshot(
+                item=MarketItem(appid=440, market_hash_name="440-A"),
+                lowest=Money(500, "EUR"),
+                volume=100,
+                source=SourceRecord(
+                    kind=SourceKind.STEAM_MARKET,
+                    url="https://steamcommunity.com/market/priceoverview/",
+                    fetched_at=datetime.now(UTC),
+                    parser_version="1",
+                    raw_sha256=SourceRecord.sha256_of(b"eur"),
+                    cache_ttl_seconds=86400,
+                ),
+            )
+        )
+        badge = compute_costs(store, currency="USD").badges[0]
+        assert badge.complete is False
+        assert badge.estimated_cost is None
+        assert any("EUR" in n for n in badge.notes)
+
+
+def test_unmarketable_needed_card_incomplete() -> None:
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=440, set_size=1))
+        store.upsert_card(Card(appid=440, market_hash_name="440-A", marketable=False))
+        _price(store, 440, "440-A", 10)
+        badge = compute_costs(store).badges[0]
+        assert badge.complete is False
+        assert any("unmarketable" in n for n in badge.notes)
+
+
+def test_low_volume_caps_confidence_to_medium() -> None:
+    with Store.in_memory() as store:
+        _seed_full_badge(store)
+        store.upsert_badge_progress(UserBadgeProgress(appid=440, level=4))
+        # Re-price one needed card with volume 0 -> low volume.
+        _price(store, 440, "440-B", 20, volume=0)
+        badge = compute_costs(store, target_level=5, min_volume=5).badges[0]
+        assert badge.complete is True
+        assert badge.confidence is Confidence.MEDIUM
+
+
+def test_owns_enough_is_complete_with_zero_cost() -> None:
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=440, set_size=1))
+        store.upsert_card(Card(appid=440, market_hash_name="440-A"))
+        _price(store, 440, "440-A", 10)
+        store.upsert_badge_progress(UserBadgeProgress(appid=440, level=4))  # 1 craft left
+        store.upsert_inventory(UserCardInventory(appid=440, market_hash_name="440-A", quantity=3))
+        report = compute_costs(store, target_level=5)
+        badge = report.badges[0]
+        assert badge.complete is True
+        assert badge.known_cost == Money(0, "USD")
+        assert badge in report.complete_badges()
+
+
+def test_known_cards_exceeding_set_size_incomplete() -> None:
+    with Store.in_memory() as store:
+        store.upsert_badge_set(BadgeSet(appid=440, set_size=1))
+        store.upsert_card(Card(appid=440, market_hash_name="440-A"))
+        store.upsert_card(Card(appid=440, market_hash_name="440-B"))  # 2 known > set_size 1
+        _price(store, 440, "440-A", 10)
+        _price(store, 440, "440-B", 20)
+        badge = compute_costs(store).badges[0]
+        assert badge.complete is False
+        assert any("data mismatch" in n for n in badge.notes)
+
+
 def test_foil_cards_excluded_by_default() -> None:
     with Store.in_memory() as store:
         store.upsert_badge_set(BadgeSet(appid=440, set_size=1))
