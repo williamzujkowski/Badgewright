@@ -54,8 +54,9 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 
 - [x] **3.1** Import `steam-badges-db` from file and URL (via SafeClient); normalize
   appid/name/size; provenance; lenient on malformed entries; size-capped. See #5.
-- [ ] **3.2** Card-name discovery — resolve card names from inventory/market/badge
-  pages/manual; confidence score per name; unknown cards represented explicitly.
+- [x] **3.2** Card-name discovery (`sbo cards discover`): market-search enumeration of a
+  game's full card list; fail-closed reconciliation vs catalog set_size; foil-filtered;
+  manual-import fallback; unknown cards stay explicit. See #47.
 
 ## Epic 4 — Market data collection & caching
 

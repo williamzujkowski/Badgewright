@@ -35,12 +35,14 @@ badges_app = typer.Typer(help="Import your badge progress.")
 prices_app = typer.Typer(help="Refresh cached market prices (network is opt-in).")
 report_app = typer.Typer(help="Export purchase plans (CSV / HTML).")
 market_app = typer.Typer(help="Market-intelligence research (never trades).")
+cards_app = typer.Typer(help="Discover the full card list for a game's badge set.")
 app.add_typer(catalog_app, name="catalog")
 app.add_typer(inventory_app, name="inventory")
 app.add_typer(badges_app, name="badges")
 app.add_typer(prices_app, name="prices")
 app.add_typer(report_app, name="report")
 app.add_typer(market_app, name="market")
+app.add_typer(cards_app, name="cards")
 
 
 def _not_yet(feature: str, milestone: str) -> None:
@@ -422,6 +424,62 @@ def report_purchase_plan(
             count = len(plan.chosen)
     typer.secho(f"Wrote {fmt.upper()} plan ({count} rows) to {out}.", fg=typer.colors.GREEN)
     typer.secho("Open it for manual review; buy cards yourself in Steam.", dim=True)
+
+
+@cards_app.command("discover")
+def cards_discover(
+    appid: int | None = typer.Option(None, help="Discover one app's cards."),
+    all_apps: bool = typer.Option(False, "--all", help="Discover for all catalog badge sets."),
+    online: bool = typer.Option(False, help="Allow network fetches (required)."),
+    max_pages: int = typer.Option(5, help="Max search pages per app (politeness)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Enumerate a game's full trading-card list so its badge can be costed."""
+    from .db import Store
+    from .sources import card_discovery as cd
+    from .sources.http_client import FetchError, RateLimited, SafeClient
+
+    if not online:
+        typer.secho("Card discovery needs the network: pass --online.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=2)
+    if bool(appid) == all_apps:  # exactly one of --appid / --all
+        typer.secho("Provide exactly one of --appid or --all.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        sizes = {b.appid: b.set_size for b in store.list_badge_sets()}
+        if all_apps:
+            targets: list[int] = list(sizes)
+        else:
+            assert appid is not None  # guaranteed by the exactly-one check above
+            if appid not in sizes:
+                typer.secho(
+                    f"appid {appid} has no badge set in the catalog; import the catalog first.",
+                    fg=typer.colors.RED,
+                )
+                raise typer.Exit(code=2)
+            targets = [appid]
+        complete = partial = 0
+        with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+            try:
+                for app_id in targets:
+                    result = cd.import_cards(
+                        store, client, app_id, sizes[app_id], max_pages=max_pages
+                    )
+                    complete += int(result.complete)
+                    partial += int(not result.complete)
+            except RateLimited as exc:
+                typer.secho(f"Stopped (rate limited): {exc}", fg=typer.colors.RED)
+                raise typer.Exit(code=1) from exc
+            except (cd.CardDiscoveryError, FetchError) as exc:
+                typer.secho(f"Discovery failed: {exc}", fg=typer.colors.RED)
+                raise typer.Exit(code=1) from exc
+    typer.secho(
+        f"Discovered card lists: {complete} complete, {partial} partial/incomplete.",
+        fg=typer.colors.GREEN,
+    )
 
 
 @market_app.command("scan-weakness")

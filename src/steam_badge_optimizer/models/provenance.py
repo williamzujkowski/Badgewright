@@ -22,6 +22,7 @@ class SourceKind(StrEnum):
 
     STEAM_WEBAPI = "steam_webapi"
     STEAM_MARKET = "steam_market"
+    STEAM_MARKET_SEARCH = "steam_market_search"
     STEAM_INVENTORY = "steam_inventory"
     STEAM_BADGE_PAGE = "steam_badge_page"
     STEAM_BADGES_DB = "steam_badges_db"

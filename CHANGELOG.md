@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **Card-name discovery** (`sources.card_discovery`, `sbo cards discover`, Epic 3.2):
+  enumerates a game's full trading-card list from the Steam market search endpoint
+  (read-only) so the optimizer can mark badges **complete** instead of "incomplete"
+  (previously only user-owned cards were known). Fail-closed reconciliation — only a
+  discovered-count == catalog set_size marks a set fully known; more/fewer stays
+  incomplete with a note, never overriding the catalog or inventing a name. Foils
+  excluded from the set (stored flagged); manual-import fallback for blocked users.
+
 ## [0.2.0] - 2026-07-05
 
 The **MVP optimizer**: ask "what's the cheapest way to gain levels?" and get a ranked,

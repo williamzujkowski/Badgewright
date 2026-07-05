@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "start": 0,
+  "pagesize": 100,
+  "total_count": 4,
+  "results": [
+    {
+      "name": "Heavy",
+      "hash_name": "440-Heavy",
+      "asset_description": { "appid": 753, "type": "Team Fortress 2 Trading Card", "market_hash_name": "440-Heavy" }
+    },
+    {
+      "name": "Pyro",
+      "hash_name": "440-Pyro",
+      "asset_description": { "appid": 753, "type": "Team Fortress 2 Trading Card" }
+    },
+    {
+      "name": "Scout",
+      "hash_name": "440-Scout",
+      "asset_description": { "appid": 753, "type": "Team Fortress 2 Trading Card" }
+    },
+    {
+      "name": "Heavy (Foil)",
+      "hash_name": "440-Heavy (Foil)",
+      "asset_description": { "appid": 753, "type": "Foil Trading Card" }
+    }
+  ]
+}
