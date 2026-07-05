@@ -442,7 +442,7 @@ def cards_discover(
     if not online:
         typer.secho("Card discovery needs the network: pass --online.", fg=typer.colors.YELLOW)
         raise typer.Exit(code=2)
-    if bool(appid) == all_apps:  # exactly one of --appid / --all
+    if (appid is not None) == all_apps:  # exactly one of --appid / --all
         typer.secho("Provide exactly one of --appid or --all.", fg=typer.colors.RED)
         raise typer.Exit(code=2)
 

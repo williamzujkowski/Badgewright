@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import orjson
 import pytest
 import respx
 
@@ -63,6 +64,31 @@ class TestDiscover:
         assert respx.calls.call_count == 1  # total_count 4 < page size -> one page
 
     @respx.mock
+    def test_multi_page_pagination_aggregates_and_stops(self) -> None:
+        def page(names: list[str]) -> httpx.Response:
+            return httpx.Response(
+                200,
+                content=orjson.dumps(
+                    {
+                        "success": True,
+                        "total_count": 4,
+                        "results": [
+                            {"hash_name": n, "asset_description": {"type": "Trading Card"}}
+                            for n in names
+                        ],
+                    }
+                ),
+            )
+
+        respx.get(cd.SEARCH_URL).mock(
+            side_effect=[page(["440-A", "440-B"]), page(["440-C", "440-D"])]
+        )
+        with SafeClient() as c:
+            cards = cd.discover_cards(c, 440, page_size=2)
+        assert {c.market_hash_name for c in cards} == {"440-A", "440-B", "440-C", "440-D"}
+        assert respx.calls.call_count == 2  # start 0 -> 2 -> 4 >= total_count 4, stop
+
+    @respx.mock
     def test_appid_is_in_category_param(self) -> None:
         route = respx.get(cd.SEARCH_URL).mock(
             return_value=httpx.Response(200, content=FIXTURE.read_bytes())
@@ -112,6 +138,68 @@ class TestReconcileAndPersist:
             result = cd.import_from_file(store, FIXTURE, 440, set_size=3)
             assert result.complete is True
             assert len(store.cards_for_app(440)) == 3
+
+    def test_rerun_replaces_not_accumulates(self, tmp_path) -> None:
+        # HIGH regression: two runs with different cards must NOT accumulate to a
+        # false complete. The second (authoritative) run replaces the first.
+        run2 = tmp_path / "run2.json"
+        run2.write_bytes(
+            orjson.dumps(
+                {
+                    "success": True,
+                    "total_count": 1,
+                    "results": [
+                        {"hash_name": "440-Xyz", "asset_description": {"type": "Trading Card"}}
+                    ],
+                }
+            )
+        )
+        with Store.in_memory() as store:
+            cd.import_from_file(store, FIXTURE, 440, set_size=3)  # finds 3
+            cd.import_from_file(store, run2, 440, set_size=3)  # now only 1
+            names = {c.market_hash_name for c in store.cards_for_app(440)}
+            assert names == {"440-Xyz"}  # replaced, not {A,B,C,Xyz}
+
+    def test_foreign_app_card_dropped_no_false_complete(self, tmp_path) -> None:
+        # HIGH regression: a leaked wrong-app card must not count toward the set.
+        contaminated = tmp_path / "c.json"
+        contaminated.write_bytes(
+            orjson.dumps(
+                {
+                    "success": True,
+                    "total_count": 3,
+                    "results": [
+                        {"hash_name": "440-Heavy", "asset_description": {"type": "Trading Card"}},
+                        {"hash_name": "440-Pyro", "asset_description": {"type": "Trading Card"}},
+                        {"hash_name": "570-Axe", "asset_description": {"type": "Trading Card"}},
+                    ],
+                }
+            )
+        )
+        with Store.in_memory() as store:
+            result = cd.import_from_file(store, contaminated, 440, set_size=3)
+            assert result.complete is False  # only 2 belong to 440, not 3
+            assert any("not belonging to appid 440" in n for n in result.notes)
+            assert "570-Axe" not in {c.market_hash_name for c in store.cards_for_app(440)}
+
+    def test_game_title_containing_foil_not_misclassified(self, tmp_path) -> None:
+        f = tmp_path / "foilball.json"
+        f.write_bytes(
+            orjson.dumps(
+                {
+                    "success": True,
+                    "total_count": 1,
+                    "results": [
+                        {
+                            "hash_name": "99-Card",
+                            "asset_description": {"type": "Foilball Trading Card"},
+                        }
+                    ],
+                }
+            )
+        )
+        cards = cd.parse_search_results(f.read_bytes())
+        assert cards[0].is_foil is False  # "Foilball" is not a foil card
 
 
 class TestDiscoveryUnblocksOptimizer:

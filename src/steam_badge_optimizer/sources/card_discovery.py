@@ -77,7 +77,12 @@ class DiscoveryResult:
 
 
 def _is_foil(hash_name: str, card_type: str) -> bool:
-    return "(foil)" in hash_name.lower() or "foil" in card_type.lower()
+    # The canonical market_hash_name carries a "(Foil)" suffix regardless of locale —
+    # the reliable signal. Fall back to an EXACT type match (not a substring, so a game
+    # title like "Foilball Trading Card" doesn't misclassify a normal card as foil).
+    if "(foil)" in hash_name.lower():
+        return True
+    return card_type.strip().lower() == "foil trading card"
 
 
 def parse_search_results(raw: bytes) -> list[DiscoveredCard]:
@@ -132,6 +137,7 @@ def discover_cards(
     for _ in range(max_pages):
         params: dict[str, Any] = {
             "norender": 1,
+            "l": "english",  # stable card `type` strings for foil detection
             "appid": 753,
             "count": page_size,
             "start": start,
@@ -140,18 +146,29 @@ def discover_cards(
         }
         resp = client.get(SEARCH_URL, params=params, max_bytes=MAX_BYTES)
         raw = resp.content
-        for card in parse_search_results(raw):
+        page = parse_search_results(raw)
+        before = len(found)
+        for card in page:
             found.setdefault(card.market_hash_name, card)
         start += page_size
-        if start >= _total_count(raw):
+        # Stop at the reported end, or if a page added nothing new (defensive).
+        if start >= _total_count(raw) or (page and len(found) == before):
             break
     return list(found.values())
 
 
 def _reconcile(appid: int, set_size: int, cards: list[DiscoveredCard]) -> DiscoveryResult:
-    normal = sorted(c.market_hash_name for c in cards if not c.is_foil)
-    foil = sorted(c.market_hash_name for c in cards if c.is_foil)
+    # Defense in depth: only keep cards that actually belong to this app. Steam card
+    # market_hash_names are prefixed "<appid>-", so a leaked/foreign card (from an
+    # over-broad server-side filter) can't inflate the count toward a false complete.
+    prefix = f"{appid}-"
+    owned = [c for c in cards if c.market_hash_name.startswith(prefix)]
+    foreign = len(cards) - len(owned)
+    normal = sorted(c.market_hash_name for c in owned if not c.is_foil)
+    foil = sorted(c.market_hash_name for c in owned if c.is_foil)
     notes: list[str] = []
+    if foreign:
+        notes.append(f"dropped {foreign} card(s) not belonging to appid {appid}")
     if len(normal) == set_size:
         complete = True
     else:
@@ -169,10 +186,12 @@ def _reconcile(appid: int, set_size: int, cards: list[DiscoveredCard]) -> Discov
 
 
 def _persist(store: Store, result: DiscoveryResult, source: SourceRecord) -> None:
-    for name in result.normal:
-        store.upsert_card(Card(appid=result.appid, market_hash_name=name, is_foil=False))
-    for name in result.foil:
-        store.upsert_card(Card(appid=result.appid, market_hash_name=name, is_foil=True))
+    # Replace (not accumulate): this run is the authoritative card list for the app, so
+    # stale rows from an earlier/partial run can't linger and cause a false complete.
+    cards = [
+        Card(appid=result.appid, market_hash_name=name, is_foil=False) for name in result.normal
+    ] + [Card(appid=result.appid, market_hash_name=name, is_foil=True) for name in result.foil]
+    store.replace_cards_for_app(result.appid, cards)
     store.record_source(source)
 
 
@@ -201,14 +220,15 @@ def import_from_file(store: Store, path: str | Path, appid: int, set_size: int) 
         raise CardDiscoveryError(f"not a file: {file_path}")
     if file_path.stat().st_size > MAX_BYTES:
         raise CardDiscoveryError(f"file exceeds size cap ({file_path.stat().st_size} bytes)")
-    cards = parse_search_results(file_path.read_bytes())
+    raw = file_path.read_bytes()  # read once; hash the exact bytes we parsed
+    cards = parse_search_results(raw)
     result = _reconcile(appid, set_size, cards)
     source = SourceRecord(
         kind=SourceKind.STEAM_MARKET_SEARCH,
         file_name=file_path.name,
         fetched_at=datetime.now(UTC),
         parser_version=PARSER_VERSION,
-        raw_sha256=SourceRecord.sha256_of(file_path.read_bytes()),
+        raw_sha256=SourceRecord.sha256_of(raw),
         cache_ttl_seconds=CATALOG_TTL_SECONDS,
     )
     _persist(store, result, source)
