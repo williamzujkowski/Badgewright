@@ -37,6 +37,13 @@ def test_init_creates_data_dir(tmp_path) -> None:
 
 
 def test_unimplemented_stub_exits_nonzero() -> None:
-    result = runner.invoke(app, ["optimize", "--budget", "50"])
+    # market scan-weakness is still a stub (Milestone 5).
+    result = runner.invoke(app, ["market", "scan-weakness", "--top", "5"])
     assert result.exit_code == 2
     assert "not implemented" in result.output.lower()
+
+
+def test_optimize_on_empty_db_is_graceful(tmp_path) -> None:
+    result = runner.invoke(app, ["optimize", "--budget", "50", "--data-dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "no badges to plan" in result.output.lower()

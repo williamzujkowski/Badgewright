@@ -32,6 +32,27 @@ XP_PER_BADGE_LEVEL = 100
 #: Max craftable levels for a normal (non-foil) game badge.
 MAX_NORMAL_BADGE_LEVEL = 5
 
+#: Base XP for one Steam *account* level. The per-level cost is a step function:
+#: reaching account level L costs 100 * ceil(L / 10) XP (100 each for 1-10, 200 for
+#: 11-20, ...). See docs/data-sources.md.
+XP_PER_ACCOUNT_LEVEL_BASE = 100
+ACCOUNT_LEVEL_BAND = 10
+
+
+def account_xp_between(current_level: int, target_level: int) -> int:
+    """Total account XP needed to go from ``current_level`` to ``target_level``.
+
+    Uses Steam's step function (per-level cost rises every 10 levels). Returns 0 if the
+    target is not above the current level.
+    """
+    from math import ceil
+
+    return sum(
+        XP_PER_ACCOUNT_LEVEL_BASE * ceil(level / ACCOUNT_LEVEL_BAND)
+        for level in range(current_level + 1, target_level + 1)
+    )
+
+
 #: priceoverview currency ids (subset; extend as needed).
 CURRENCY_IDS: dict[str, int] = {"USD": 1, "GBP": 2, "EUR": 3, "CHF": 4, "RUB": 5}
 

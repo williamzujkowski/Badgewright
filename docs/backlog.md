@@ -82,9 +82,8 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   reach a target level; `crafts_needed = target - current_level`; duplicates subtracted;
   excludes L5/foil; ready-to-craft surfaced; incomplete-badge fail-closed (no fabricated
   cost); confidence signal. See #38. (Accuracy refined later by order-book depth #15.)
-- [ ] **5.2** Greedy MVP optimizer — sort candidate crafts by (risk-adjusted) marginal
-  cost/XP, fill to budget/target. **Provably optimal for uniform XP** (see
-  optimizer-model.md); ships as the primary optimizer.
+- [x] **5.2** Greedy optimizer — rank complete badges by cost-per-XP, fill to budget/
+  target-level (account XP step function), explain chosen/skipped, `sbo optimize`. See #39.
 - [ ] **5.3 (DEMOTED → shelf spec, optimizer)** ILP engine — only warranted once value
   is non-uniform (per-vendor caps, foil-XP, completion bonus). Keep the formulation
   documented; do **not** build for MVP. Was Epic 5.3 "must-have"; review found greedy
