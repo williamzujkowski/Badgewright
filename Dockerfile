@@ -6,7 +6,7 @@
 # the README "Docker" section for the full command.
 
 # Pin the base by tag AND digest for reproducibility (Dependabot keeps the digest fresh).
-FROM python:3.13-slim@sha256:af5bd286051a06b38587d30a8638958f4a2f38381aa80fe859c740af3411bd4d AS builder
+FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -21,7 +21,7 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install .
 
 # --- runtime -----------------------------------------------------------------
-FROM python:3.13-slim@sha256:af5bd286051a06b38587d30a8638958f4a2f38381aa80fe859c740af3411bd4d
+FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
