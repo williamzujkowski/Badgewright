@@ -504,6 +504,45 @@ def report_purchase_plan(
     typer.secho("Open it for manual review; buy cards yourself in Steam.", dim=True)
 
 
+@report_app.command("cheapest-badges")
+def report_cheapest_badges(
+    out: str = typer.Option(..., help="Output file path (.csv or .html)."),
+    top: int = typer.Option(50, help="How many cheapest badges to export."),
+    min_listings: int = typer.Option(2, help="Min asks/volume per card to count as liquid."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Export the cheapest-badges ranking to CSV or inert HTML for review. Never trades."""
+    from datetime import UTC, datetime
+
+    from .analytics import rank_cheapest_badges
+    from .db import Store
+    from .reports import write_cheapest
+
+    if top <= 0:
+        typer.secho("--top must be positive.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not out.lower().endswith((".csv", ".html", ".htm")):
+        typer.secho("--out must end in .csv or .html.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        badges = rank_cheapest_badges(
+            store, currency=settings.currency, min_listings=min_listings, top=top
+        )
+        names = {a.appid: a.name for a in store.list_apps()}
+    count = write_cheapest(badges, names, out, currency=settings.currency, now=datetime.now(UTC))
+    if count == 0:
+        typer.secho(
+            "Wrote an empty report — no fully-known, priced badges yet "
+            "(run a sweep / plan-cheapest first).",
+            fg=typer.colors.YELLOW,
+        )
+    else:
+        typer.secho(f"Wrote {count} cheapest badge(s) to {out}.", fg=typer.colors.GREEN)
+    typer.secho("Research only. Buy cards manually in Steam.", dim=True)
+
+
 @cards_app.command("discover")
 def cards_discover(
     appid: int | None = typer.Option(None, help="Discover one app's cards."),

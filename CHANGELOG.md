@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- **`sbo report cheapest-badges --out <path.csv|.html>`** (#70): export the cheapest-badges
+  ranking (rank, game, appid, cards, total cost, cost-per-XP, confidence, buyable, bottleneck
+  %, notes, as-of timestamp) as a spreadsheet-ready CSV or a static, inert HTML page for
+  human review/sharing. Reuses the hardened report infra — CSV cells get formula-injection
+  neutralization; the HTML escapes every Steam-sourced field and is validated inert (no
+  scripts/handlers/active links) before writing. Offline; the timestamp is injectable so
+  output is deterministic.
+
 ## [0.10.0] - 2026-07-05
 
 Liquidity precision: confirm a cheap badge is really buyable with real 24h volume, and
