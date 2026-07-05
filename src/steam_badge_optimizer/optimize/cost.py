@@ -122,6 +122,7 @@ def compute_costs(
         any_stale = False
         low_volume = False
         uncostable = False
+        multi_unit = False
 
         for card in known:
             missing = max(0, crafts_needed - owned.get(card.market_hash_name, 0))
@@ -156,6 +157,17 @@ def compute_costs(
                 )
             )
             line_costs.append(Money(unit.cents * missing, currency))
+            if missing > 1:
+                multi_unit = True
+
+        if multi_unit:
+            # priceoverview's `lowest` is a single-unit ask, so `missing * lowest` is a
+            # FLOOR: buying several copies walks the order book and typically costs more.
+            # We surface this rather than silently under-budget (proper depth: #15).
+            notes.append(
+                "estimate is a floor — buying multiple copies of a card usually costs "
+                "more than quantity x lowest (order-book depth not yet modeled)"
+            )
 
         if cards_unknown > 0:
             notes.append(
@@ -178,8 +190,10 @@ def compute_costs(
         )
         confidence = _confidence(
             complete=complete,
+            # A floor estimate (multi-unit) is uncertain, so treat it like a
+            # low-volume quote — it can't earn HIGH confidence.
             any_stale=any_stale,
-            low_volume=low_volume,
+            low_volume=low_volume or multi_unit,
             level_assumed=level_assumed,
         )
 
