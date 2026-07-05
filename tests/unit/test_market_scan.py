@@ -116,6 +116,52 @@ class TestScanWeakness:
                 return
             raise AssertionError("expected ValueError")
 
+    def test_min_volume_below_one_rejected(self) -> None:
+        # A threshold of 0 would disable the liquidity safeguard entirely.
+        with Store.in_memory() as store:
+            for bad in (0, -1):
+                try:
+                    scan_weakness(store, min_volume=bad)
+                except ValueError:
+                    continue
+                raise AssertionError(f"expected ValueError for min_volume={bad}")
+
+    def test_volatility_not_polluted_by_currency_change(self) -> None:
+        # History with EUR then USD snapshots must NOT compute a cross-currency CV.
+        with Store.in_memory() as store:
+            base = datetime(2026, 7, 1, tzinfo=UTC)
+            for i in range(MIN_SNAPSHOTS_FOR_VOLATILITY):
+                _snap(
+                    store,
+                    1,
+                    "1-A",
+                    low=500,
+                    median=600,
+                    volume=100,
+                    when=base + timedelta(days=i),
+                    currency="EUR",
+                )
+            _snap(
+                store,
+                1,
+                "1-A",
+                low=50,
+                median=60,
+                volume=100,
+                when=base + timedelta(days=10),
+                currency="USD",
+            )  # latest = USD
+            row = scan_weakness(store, currency="USD", top=10)[0]
+            # Only 1 USD point in history -> insufficient, not a bogus CV from EUR->USD.
+            assert row.volatility is None
+
+    def test_deeper_liquidity_outranks_bare_threshold_for_equal_gap(self) -> None:
+        with Store.in_memory() as store:
+            _snap(store, 1, "1-Thin", low=80, median=100, volume=5)  # 20% gap, at threshold
+            _snap(store, 2, "2-Deep", low=80, median=100, volume=5000)  # same gap, deep
+            rows = scan_weakness(store, min_volume=5, top=10)
+            assert rows[0].market_hash_name == "2-Deep"  # liquidity breaks the tie
+
 
 class TestScanSets:
     def test_complete_set_cost_and_dominance(self) -> None:

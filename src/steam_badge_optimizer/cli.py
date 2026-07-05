@@ -495,6 +495,9 @@ def market_scan_weakness(
     if top <= 0:
         typer.secho("--top must be positive.", fg=typer.colors.RED)
         raise typer.Exit(code=2)
+    if min_volume < 1:
+        typer.secho("--min-volume must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
     settings = Settings.resolve(data_dir=data_dir, currency=None)
     with Store(settings.db_path) as store:
         rows = scan_weakness(store, currency=settings.currency, min_volume=min_volume, top=top)
@@ -520,6 +523,9 @@ def market_scan_sets(
     from .analytics import scan_sets
     from .db import Store
 
+    if sort not in {"cheapest", "dominance"}:
+        typer.secho("--sort must be 'cheapest' or 'dominance'.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
     settings = Settings.resolve(data_dir=data_dir, currency=None)
     with Store(settings.db_path) as store:
         sets = scan_sets(store, currency=settings.currency)

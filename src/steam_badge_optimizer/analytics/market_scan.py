@@ -92,6 +92,8 @@ def scan_weakness(
     """Rank cards by a liquidity-weighted price-weakness score (research only)."""
     if top <= 0:
         raise ValueError("top must be positive")
+    if min_volume < 1:
+        raise ValueError("min_volume must be >= 1 (a threshold of 0 would trust every quote)")
     rows: list[CardWeakness] = []
     for appid, name in store.iter_price_items():
         snap = store.latest_price(appid, name)
@@ -103,16 +105,26 @@ def scan_weakness(
 
         gap = _gap(snap.lowest, snap.median)
         volume = snap.volume or 0
-        history = [s.lowest.cents for s in store.price_history(appid, name) if s.lowest is not None]
+        # Volatility only over same-currency history — a currency change between refreshes
+        # must not masquerade as price movement.
+        history = [
+            s.lowest.cents
+            for s in store.price_history(appid, name)
+            if s.lowest is not None and s.lowest.currency == currency
+        ]
         volatility = _volatility(history)
 
         signals: list[str] = []
-        # Liquidity weight in [0, 1]: below the threshold the quote is unreliable, so
-        # its weight (and thus its score) collapses toward zero — it can't top the list.
-        liquidity_weight = min(1.0, volume / min_volume) if min_volume > 0 else 1.0
         low_volume = volume < min_volume
         if low_volume:
+            # Hard gate: a sub-threshold quote is unreliable and is never scored as an
+            # opportunity on a price gap alone (weight 0 -> score 0).
+            liquidity_weight = 0.0
             signals.append(f"low volume ({volume} < {min_volume}) — unreliable, risky")
+        else:
+            # Soft, non-saturating weight so deeper liquidity ranks above bare-threshold
+            # volume (approaches 1 as volume grows; 0.5 at the threshold).
+            liquidity_weight = volume / (volume + min_volume)
         if snap.is_stale():
             signals.append("price is stale")
             liquidity_weight *= 0.5
@@ -143,7 +155,8 @@ def scan_weakness(
                 signals=signals,
             )
         )
-    rows.sort(key=lambda r: (r.score, r.volume or 0), reverse=True)
+    # Deterministic order: score, then liquidity, then name as a stable tie-break.
+    rows.sort(key=lambda r: (r.score, r.volume or 0, r.market_hash_name), reverse=True)
     return rows[:top]
 
 
