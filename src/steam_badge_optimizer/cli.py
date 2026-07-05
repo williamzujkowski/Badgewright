@@ -789,8 +789,8 @@ def market_plan_cheapest(
     from .analytics import rank_cheapest_badges, select_candidate_games
     from .db import Store
     from .models import MarketItem
-    from .sources.card_discovery import import_cards
-    from .sources.http_client import RateLimited, SafeClient
+    from .sources.card_discovery import CardDiscoveryError, import_cards
+    from .sources.http_client import FetchError, RateLimited, SafeClient
     from .sources.steam_market import refresh_prices
 
     settings = Settings.resolve(data_dir=data_dir, currency=None)
@@ -831,6 +831,11 @@ def market_plan_cheapest(
                         fg=typer.colors.YELLOW,
                     )
                     break
+                except (CardDiscoveryError, FetchError) as exc:
+                    # A delisted game (404), a transient blip, or a parse failure on one
+                    # game shouldn't abort the whole pass — skip it and keep going.
+                    typer.secho(f"  skipped appid {c.appid}: {exc}", fg=typer.colors.YELLOW)
+                    continue
 
         ranked = rank_cheapest_badges(
             store, currency=settings.currency, min_listings=min_listings, top=top

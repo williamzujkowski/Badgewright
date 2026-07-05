@@ -19,6 +19,8 @@ from steam_badge_optimizer.models import (
     SourceRecord,
 )
 
+SEARCH = "https://steamcommunity.com/market/search/render/"
+
 
 def _price(store: Store, appid: int, name: str, cents: int, currency: str = "USD") -> None:
     store.add_price_snapshot(
@@ -90,6 +92,28 @@ class TestSelectCandidates:
             assert [c.appid for c in ranked] == [100, 200]  # cap + deterministic appid order
 
 
+class _DummyClient:
+    def __init__(self, **kwargs) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a) -> bool:
+        return False
+
+
+def _seed_candidate(tmp_path) -> None:
+    from steam_badge_optimizer.config import Settings
+
+    s = Settings.resolve(data_dir=str(tmp_path))
+    s.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(s.db_path) as store:
+        store.upsert_badge_set(BadgeSet(appid=100, set_size=3))
+        store.upsert_card(Card(appid=100, market_hash_name="100-A"))
+        _price(store, 100, "100-A", 5)
+
+
 class TestPlanCheapestCliIsOptIn:
     @respx.mock
     def test_refuses_without_both_flags(self, tmp_path) -> None:
@@ -106,3 +130,41 @@ class TestPlanCheapestCliIsOptIn:
             result = runner.invoke(app, args)
             assert result.exit_code == 2, args
         assert respx.calls.call_count == 0  # never touched the network
+
+    def test_skips_game_on_non_429_error_and_continues(self, tmp_path, monkeypatch) -> None:
+        from typer.testing import CliRunner
+
+        import steam_badge_optimizer.sources.card_discovery as cd
+        import steam_badge_optimizer.sources.http_client as hc
+        from steam_badge_optimizer.cli import app
+        from steam_badge_optimizer.sources.http_client import FetchError
+
+        _seed_candidate(tmp_path)
+        monkeypatch.setattr(hc, "SafeClient", _DummyClient)
+        monkeypatch.setattr(
+            cd, "import_cards", lambda *a, **k: (_ for _ in ()).throw(FetchError("blip"))
+        )
+        result = CliRunner().invoke(
+            app, ["market", "plan-cheapest", "--online", "--confirm", "--data-dir", str(tmp_path)]
+        )
+        assert result.exit_code == 0  # graceful, not a traceback
+        assert "skipped appid 100" in result.output
+
+    def test_hard_stops_on_rate_limit(self, tmp_path, monkeypatch) -> None:
+        from typer.testing import CliRunner
+
+        import steam_badge_optimizer.sources.card_discovery as cd
+        import steam_badge_optimizer.sources.http_client as hc
+        from steam_badge_optimizer.cli import app
+        from steam_badge_optimizer.sources.http_client import RateLimited
+
+        _seed_candidate(tmp_path)
+        monkeypatch.setattr(hc, "SafeClient", _DummyClient)
+        monkeypatch.setattr(
+            cd, "import_cards", lambda *a, **k: (_ for _ in ()).throw(RateLimited(SEARCH, None))
+        )
+        result = CliRunner().invoke(
+            app, ["market", "plan-cheapest", "--online", "--confirm", "--data-dir", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+        assert "rate-limited" in result.output.lower()
