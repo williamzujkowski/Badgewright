@@ -581,5 +581,36 @@ def market_scan_sets(
     typer.secho("\nResearch only.", dim=True)
 
 
+@market_app.command("anomalies")
+def market_anomalies(
+    top: int = typer.Option(20, help="Number of results."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Research: flag unusual price movements from stored history. Never trades."""
+    from .analytics import detect_anomalies
+    from .db import Store
+
+    if top <= 0:
+        typer.secho("--top must be positive.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        anomalies = detect_anomalies(store, currency=settings.currency, top=top)
+    if not anomalies:
+        typer.echo(
+            "No anomalies (or not enough price history). Refresh prices over time to "
+            "build history: sbo prices refresh --online"
+        )
+        return
+    typer.secho(f"Price anomalies ({settings.currency}) — NOT trading advice:", bold=True)
+    for a in anomalies:
+        typer.echo(
+            f"  {a.appid} {a.market_hash_name}: {a.kind.value} "
+            f"(latest {a.latest.amount:.2f} vs {a.reference.amount:.2f}) "
+            f"[{a.confidence.value}] — {a.caveat}"
+        )
+    typer.secho("\nResearch only. Anomalies are speculative; verify before any action.", dim=True)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

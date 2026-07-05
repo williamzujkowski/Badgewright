@@ -8,6 +8,15 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
+- **Historical price-anomaly detection** (`analytics.anomalies`, `sbo market anomalies`,
+  Epic 6.3): flags cards with a sudden drop (vs trailing mean), a mean-reversion low
+  outlier (z-score), or a stale median far above the live lowest — from the append-only
+  price history. Fail-closed: a card with < 5 same-currency history points is skipped
+  ("insufficient history"), currency-consistent, and every result is coarse (never HIGH)
+  confidence with an explicit caveat. Research only; executes nothing.
+
+### Added
+
 - **Badge-progress ingestion** (`sources.badge_progress`, `sbo badges import`, Epic 2.4):
   imports the user's real per-game badge levels so plans use them instead of assuming
   level 0 (which overstated cost and XP). Primary source is the official Steam Web API
