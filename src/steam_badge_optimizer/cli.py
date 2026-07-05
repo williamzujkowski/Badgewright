@@ -758,5 +758,96 @@ def market_sweep_cmd(
     typer.secho("Then rank results with: sbo market cheapest-badges", dim=True)
 
 
+@market_app.command("plan-cheapest")
+def market_plan_cheapest(
+    online: bool = typer.Option(False, help="Allow network access (required, with --confirm)."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Acknowledge this fetches from Steam for a few games."
+    ),
+    max_games: int = typer.Option(5, help="How many candidate games to complete (bounded)."),
+    top: int = typer.Option(15, help="How many cheapest badges to show."),
+    min_listings: int = typer.Option(2, help="Min asks per card to count a set as liquid."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Complete the most promising cheap candidate games, then rank cheapest badges.
+
+    Off by default (needs --online and --confirm). Uses cached prices (seed them with
+    `sbo market sweep`) to pick the games cheapest to finish, then discovers + prices just
+    those sets — a small, bounded request budget. Reads public data; never trades.
+    """
+    if max_games < 1:
+        typer.secho("--max-games must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not (online and confirm):
+        typer.secho("This fetches from Steam, so it is OFF by default.", fg=typer.colors.YELLOW)
+        typer.echo(
+            "Re-run with BOTH --online and --confirm. It completes only the --max-games "
+            "cheapest candidate games (seed prices first with `sbo market sweep`)."
+        )
+        raise typer.Exit(code=2)
+
+    from .analytics import rank_cheapest_badges, select_candidate_games
+    from .db import Store
+    from .models import MarketItem
+    from .sources.card_discovery import import_cards
+    from .sources.http_client import RateLimited, SafeClient
+    from .sources.steam_market import refresh_prices
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+    with Store(settings.db_path) as store:
+        candidates = select_candidate_games(store, currency=settings.currency, max_games=max_games)
+        if not candidates:
+            typer.echo(
+                "No candidate games with cached cheap prices. Seed some first:\n"
+                "  sbo market sweep --online --confirm"
+            )
+            return
+        set_sizes = {c.appid: c.set_size for c in candidates}
+        names = {a.appid: a.name for a in store.list_apps()}
+        typer.secho(
+            f"Completing {len(candidates)} candidate game(s), cheapest-to-finish:", bold=True
+        )
+        for c in candidates:
+            game = names.get(c.appid, f"App {c.appid}")
+            typer.echo(
+                f"  appid {c.appid} {game}: {c.priced_count}/{c.set_size} priced, "
+                f"est ~{c.est_completion_cents / 100:.2f} {settings.currency} to complete"
+            )
+
+        with SafeClient(min_interval_s=interval) as client:
+            for c in candidates:
+                try:
+                    import_cards(store, client, c.appid, set_sizes[c.appid])
+                    items = [
+                        MarketItem(appid=c.appid, market_hash_name=card.market_hash_name)
+                        for card in store.cards_for_app(c.appid, include_foil=False)
+                    ]
+                    refresh_prices(store, client, items, settings.currency)
+                except RateLimited:
+                    typer.secho(
+                        "Steam rate-limited us; stopping. Re-run later to continue.",
+                        fg=typer.colors.YELLOW,
+                    )
+                    break
+
+        ranked = rank_cheapest_badges(
+            store, currency=settings.currency, min_listings=min_listings, top=top
+        )
+    if not ranked:
+        typer.echo("No sets were completed this pass. Try a larger --max-games or sweep more.")
+        return
+    typer.secho(f"\nCheapest badges to make ({settings.currency}) — NOT trading advice:", bold=True)
+    for b in ranked:
+        game = names.get(b.appid, f"App {b.appid}")
+        liq = "" if b.liquid else "  thin"
+        typer.echo(
+            f"  {b.total_cost.amount:>7.2f}  {game} (appid {b.appid}, {b.set_size} cards) "
+            f"[{b.confidence.value}]{liq}"
+        )
+    typer.secho("\nResearch only. Buy cards manually in Steam.", dim=True)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
