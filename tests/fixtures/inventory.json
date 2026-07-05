@@ -1,0 +1,37 @@
+{
+  "assets": [
+    { "appid": 753, "contextid": "6", "assetid": "1001", "classid": "c1", "instanceid": "i1", "amount": "2" },
+    { "appid": 753, "contextid": "6", "assetid": "1002", "classid": "c1", "instanceid": "i1", "amount": "1" },
+    { "appid": 753, "contextid": "6", "assetid": "1003", "classid": "c2", "instanceid": "i2", "amount": "1" },
+    { "appid": 753, "contextid": "6", "assetid": "1004", "classid": "c3", "instanceid": "i3", "amount": "1" },
+    { "appid": 753, "contextid": "6", "assetid": "1005", "classid": "cX", "instanceid": "iX", "amount": "1" }
+  ],
+  "descriptions": [
+    {
+      "classid": "c1", "instanceid": "i1", "market_hash_name": "440-Heavy",
+      "market_name": "Heavy", "market_fee_app": 440, "type": "Team Fortress 2 Trading Card",
+      "marketable": 1, "tradable": 1,
+      "tags": [
+        { "category": "item_class", "internal_name": "item_class_2", "localized_tag_name": "Trading Card" },
+        { "category": "cardborder", "internal_name": "cardborder_0", "localized_tag_name": "Normal" }
+      ]
+    },
+    {
+      "classid": "c2", "instanceid": "i2", "market_hash_name": "440-Pyro",
+      "market_name": "Pyro", "market_fee_app": 440, "type": "Karte mit Sammelbild",
+      "marketable": 1, "tradable": 0,
+      "tags": [
+        { "category": "item_class", "internal_name": "item_class_2", "localized_tag_name": "Sammelkarte" },
+        { "category": "cardborder", "internal_name": "cardborder_1", "localized_tag_name": "Folie" }
+      ]
+    },
+    {
+      "classid": "c3", "instanceid": "i3", "market_hash_name": "440-Background",
+      "market_name": "A Background", "market_fee_app": 440, "type": "Profile Background",
+      "marketable": 1, "tradable": 1,
+      "tags": [
+        { "category": "item_class", "internal_name": "item_class_3", "localized_tag_name": "Profile Background" }
+      ]
+    }
+  ]
+}

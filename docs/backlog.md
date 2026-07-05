@@ -42,10 +42,9 @@ becomes an index. Items marked ✅ are done in the current scaffold.
 - [ ] **2.2** OpenID login helper — identity only; **verify signature via
   `check_authentication`**; discard response, keep only SteamID64; isolated ephemeral
   cookie context wiped after extraction (see 2.5).
-- [ ] **2.3** Inventory ingestion — reader for `appid 753 / contextid 6`; cursor
-  pagination; join `assets`↔`descriptions`; **HTTP 403 ⇒ private, suggest manual
-  import** (don't treat as empty); manual-import fallback. Fixtures: normal/foil/
-  duplicate/missing-metadata cards.
+- [x] **2.3** Inventory ingestion — 753/6 parser (join assets<->descriptions, dedup,
+  tag-based foil), SafeClient paginated fetch, 403->PrivateInventoryError, file
+  fallback; discovered cards feed pricing. See #6.
 - [ ] **2.4** Badge-progress ingestion — level 0–5 per game, foil status, exclude
   maxed; start from manual/exported HTML if live parsing is fragile.
 - [ ] **2.5 (NEW, security)** OpenID cookie-jar isolation test — assert no Steam

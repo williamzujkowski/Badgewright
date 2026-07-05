@@ -8,6 +8,14 @@ versioning once it reaches 1.0.
 
 ### Added — Milestone 2 (in progress)
 
+- Inventory ingestion (`sources.steam_inventory`, `sbo inventory import`): parses the
+  753/6 trading-card inventory (joins assets<->descriptions, sums duplicates, derives
+  foil status from the structural `cardborder` tag — locale-independent), skips and
+  counts malformed entries, fails loud only on a broken envelope. Fetches a public
+  inventory via SafeClient with bounded pagination (HTTP 403 -> PrivateInventoryError
+  with a manual-import hint) or imports a saved JSON file. Discovered cards feed the
+  price fetcher. Adds `SafeClient` HTTPStatusError carrying the status code.
+
 - SteamID resolution (`sources.steamid`, `sbo steamid`): accepts a raw SteamID64,
   a profile URL, or a vanity name (resolved via the public profile XML through
   SafeClient — no API key, no login). Hostile vanity input is rejected before any
