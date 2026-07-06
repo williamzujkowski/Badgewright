@@ -125,16 +125,10 @@ def booster_crafting_cost_gems(set_size: int) -> int:
 def latest_sack_price(store: Store, *, currency: str | None = None) -> PriceSnapshot | None:
     """The most recent cached Sack-of-Gems price, optionally constrained to ``currency``.
 
-    ``store.latest_price`` returns the newest snapshot regardless of currency, so a stray
-    fetch in another currency could mask a usable one. When ``currency`` is given, walk the
-    history and return the newest snapshot whose lowest ask is in that currency (or ``None``).
+    Delegates to the currency-aware :meth:`Store.latest_price`, which skips stray fetches in
+    other currencies so a later one can't mask a usable price.
     """
-    if currency is None:
-        return store.latest_price(SACK_OF_GEMS_APPID, SACK_OF_GEMS_HASH)
-    for snap in reversed(store.price_history(SACK_OF_GEMS_APPID, SACK_OF_GEMS_HASH)):
-        if snap.lowest is not None and snap.lowest.currency == currency:
-            return snap
-    return None
+    return store.latest_price(SACK_OF_GEMS_APPID, SACK_OF_GEMS_HASH, currency=currency)
 
 
 def refresh_sack_price(
