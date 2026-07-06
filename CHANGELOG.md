@@ -6,6 +6,41 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-06
+
+Arbitrage & inventory valuation (epic #94): value Steam gems in real money, value your own
+held cards against the live market, and flag Booster Packs that look cheaper than their card
+contents — all strictly read-only and human-executed (Badgewright never buys, sells, crafts,
+or trades). Docs now also name Augmented Steam / Steam Card Exchange as alternatives.
+
+### Added
+
+- **`sbo market gems [--set-size N] [--online --confirm]`** (#95): value gems in real money
+  via the Sack of Gems (a normal appid-753 market item, priced through the existing guarded
+  layer — no new egress, no schema change) and show the gem cost to craft a booster
+  (`~6000 / set_size`). Gross (buy) and net-of-fee (sell) per-gem figures; reads the cached
+  price, `--online --confirm` refreshes it. Currency-aware so a stray other-currency fetch
+  can't mask a usable price.
+- **`sbo inventory value [--top N]`** (#97): value your held cards at the current market
+  floor with a portfolio total (a floor over the priced subset; unpriced holdings flagged,
+  never zeroed). Offline; seed prices with `sbo prices refresh --online`.
+- **`sbo market booster-arbitrage --online --confirm`** (#98): for the cheapest fully-priced
+  games, fetch the Booster Pack price (one guarded search on item-class 5) and compare it to
+  the expected resale value of its 3 cards. Bounded (`--max-games`), rate-polite,
+  429-hard-stop. Honest by construction: the estimate is framed as an optimistic ceiling on a
+  high-variance draw (confidence capped at LOW), resale liquidity uses 24h demand not
+  ask-depth, and a skew signal fires when one card dominates the set. Research, not advice.
+- **`sbo report inventory-value --out <path.csv|.html>`** (#99): export the inventory
+  valuation as formula-injection-safe CSV or static inert HTML (every Steam-sourced field
+  escaped, validated inert before write), with the priced-floor total and an injectable
+  timestamp.
+
+### Changed
+
+- `Store.latest_price` gained an optional `currency=` filter (newest snapshot whose lowest
+  ask is in that currency), reused by the gem layer and inventory valuation so a stray
+  other-currency fetch never masks a usable price.
+
 ## [1.0.0] - 2026-07-05
 
 First stable release. Badgewright is feature-complete: find the cheapest Steam badges to
