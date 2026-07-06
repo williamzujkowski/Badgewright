@@ -98,6 +98,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo market sweep --online --confirm` | Bounded, resumable, cheapest-first bulk price sweep. |
 | `sbo market cheapest-badges [--enrich-top K]` | Rank cheapest badges to make (liquidity-gated). |
 | `sbo market plan-cheapest --online --confirm` | Complete the cheapest candidate games, then rank. |
+| `sbo market gems [--set-size N] [--online --confirm]` | Value gems in real money (Sack of Gems) + booster gem cost; reads cached price, `--online --confirm` refreshes. |
 | `sbo market scan-sets / scan-weakness / anomalies` | Market-intelligence research (never advice). |
 | `sbo optimize [--budget B] [--badge-level L]` | Cheapest plan to a target level/budget (greedy). |
 | `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |
@@ -151,6 +152,13 @@ Run `sbo delete-all` to purge every local file (database plus its journal sideca
 - [Optimizer model](docs/optimizer-model.md)
 - [Market model](docs/market-model.md)
 - [Backlog / issues](docs/backlog.md)
+
+## Alternatives
+
+Badgewright is local-first and read-only by design. If you want live in-browser overlays
+of gem/card/booster values instead, [Augmented Steam](https://augmentedsteam.com/) and
+[Steam Card Exchange](https://www.steamcardexchange.net/) cover similar ground (they run
+in the browser against live Steam pages rather than as an auditable, guarded-GET CLI).
 
 ## License
 
