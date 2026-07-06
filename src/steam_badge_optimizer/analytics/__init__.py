@@ -1,6 +1,7 @@
 """Market-intelligence analytics (research only — never trades)."""
 
 from .anomalies import Anomaly, AnomalyKind, detect_anomalies
+from .booster_arbitrage import BoosterArbitrage, evaluate_booster, scan_booster_arbitrage
 from .candidate_selection import CandidateGame, select_candidate_games
 from .cheapest_badges import BadgeSetCost, rank_cheapest_badges
 from .gem_economy import (
@@ -19,6 +20,7 @@ __all__ = [
     "Anomaly",
     "AnomalyKind",
     "BadgeSetCost",
+    "BoosterArbitrage",
     "CandidateGame",
     "CardWeakness",
     "GemValue",
@@ -27,12 +29,14 @@ __all__ = [
     "SetSignal",
     "booster_crafting_cost_gems",
     "detect_anomalies",
+    "evaluate_booster",
     "gem_value",
     "gems_to_money",
     "latest_sack_price",
     "rank_cheapest_badges",
     "refresh_sack_price",
     "sack_of_gems_item",
+    "scan_booster_arbitrage",
     "scan_sets",
     "scan_weakness",
     "select_candidate_games",
