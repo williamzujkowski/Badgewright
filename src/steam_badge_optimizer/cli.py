@@ -950,5 +950,84 @@ def market_plan_cheapest(
     typer.secho("\nResearch only. Buy cards manually in Steam.", dim=True)
 
 
+@market_app.command("gems")
+def market_gems_cmd(
+    online: bool = typer.Option(False, help="Allow network access (with --confirm) to refresh."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Acknowledge this fetches the Sack of Gems price from Steam."
+    ),
+    set_size: int | None = typer.Option(
+        None, "--set-size", help="Also show the gem cost to craft a booster for an N-card set."
+    ),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Value Steam gems in real money (via the Sack of Gems) + the gem cost to craft a booster.
+
+    Reads the cached Sack-of-Gems price by default; pass BOTH --online and --confirm to
+    refresh it. Reads public market data; never buys, sells, or crafts.
+    """
+    if set_size is not None and set_size < 1:
+        typer.secho("--set-size must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if online and not confirm:
+        typer.secho("Refreshing the gem price fetches from Steam, so it needs --confirm too.")
+        raise typer.Exit(code=2)
+
+    from .analytics import (
+        booster_crafting_cost_gems,
+        gem_value,
+        gems_to_money,
+        latest_sack_price,
+        refresh_sack_price,
+    )
+    from .db import Store
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        if online and confirm:
+            from .sources.http_client import RateLimited, SafeClient
+
+            try:
+                with SafeClient(min_interval_s=settings.min_request_interval_s) as client:
+                    snap = refresh_sack_price(store, client, currency=settings.currency)
+            except RateLimited:
+                typer.secho(
+                    "Steam rate-limited us; using the cached price.", fg=typer.colors.YELLOW
+                )
+                snap = latest_sack_price(store, currency=settings.currency)
+        else:
+            snap = latest_sack_price(store, currency=settings.currency)
+
+        if snap is None or snap.lowest is None:
+            typer.secho(
+                f"No cached Sack-of-Gems price in {settings.currency}. Fetch it with:\n"
+                "  sbo market gems --online --confirm",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(code=1)
+
+        value = gem_value(snap.lowest)
+        per_1k = gems_to_money(1000, value)
+        typer.secho(
+            f"Sack of Gems (1000 gems): {snap.lowest.amount:.2f} {value.currency}", bold=True
+        )
+        typer.echo(
+            f"  1 gem ≈ {value.cents_per_gem:.5f}¢ to buy; "
+            f"1000 gems ≈ {per_1k.amount:.2f} {value.currency}"
+        )
+        sizes = [set_size] if set_size is not None else [5, 6, 8, 10, 15]
+        typer.secho("Booster crafting cost (gems ≈ money to buy those gems):", bold=True)
+        for n in sizes:
+            gems = booster_crafting_cost_gems(n)
+            typer.echo(
+                f"  {n:>2}-card set: {gems:>4} gems ≈ "
+                f"{gems_to_money(gems, value).amount:.2f} {value.currency}"
+            )
+    typer.secho(
+        "\nResearch only. Gem/booster decisions are yours, made manually in Steam.", dim=True
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
