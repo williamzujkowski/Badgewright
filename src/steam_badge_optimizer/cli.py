@@ -1085,5 +1085,98 @@ def market_gems_cmd(
     )
 
 
+@market_app.command("booster-arbitrage")
+def market_booster_arbitrage(
+    online: bool = typer.Option(False, help="Allow network access (required, with --confirm)."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Acknowledge this fetches booster prices from Steam."
+    ),
+    max_games: int = typer.Option(10, help="How many fully-priced games to check (bounded)."),
+    min_listings: int = typer.Option(5, help="Min pack asks / card 24h sales to call it liquid."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Flag Booster Packs cheaper than their card contents (research only; never trades).
+
+    Off by default (needs --online and --confirm). Uses cached card floors (seed with
+    `sbo market sweep` / `plan-cheapest`) to pick the cheapest fully-priced games, fetches
+    just those games' booster prices (bounded by --max-games, rate-polite, 429-hard-stop),
+    and reports where the pack looks cheaper than reselling its 3 cards.
+
+    Note: this samples the CHEAPEST-badge games (the cheap tail), so margins are small and
+    it won't surface high-value arbitrage in expensive-card sets. The estimate is an
+    optimistic ceiling on a high-variance 3-card draw — never a guaranteed profit.
+    """
+    if max_games < 1:
+        typer.secho("--max-games must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not (online and confirm):
+        typer.secho("This fetches from Steam, so it is OFF by default.", fg=typer.colors.YELLOW)
+        typer.echo(
+            "Re-run with BOTH --online and --confirm. It checks only the --max-games cheapest "
+            "fully-priced games (seed card prices first with `sbo market sweep`)."
+        )
+        raise typer.Exit(code=2)
+
+    from .analytics import rank_cheapest_badges, scan_booster_arbitrage
+    from .db import Store
+    from .sources.booster_market import BoosterQuote, fetch_booster_price
+    from .sources.http_client import FetchError, RateLimited, SafeClient
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+    with Store(settings.db_path) as store:
+        candidates = rank_cheapest_badges(store, currency=settings.currency, top=max_games)
+        if not candidates:
+            typer.echo(
+                "No fully-priced games cached. Seed card prices first:\n"
+                "  sbo market sweep --online --confirm"
+            )
+            return
+        names = {a.appid: a.name for a in store.list_apps()}
+        quotes: dict[int, BoosterQuote] = {}
+        typer.echo(
+            f"Fetching booster prices for {len(candidates)} game(s) at ~1 req/{interval:.0f}s."
+        )
+        with SafeClient(min_interval_s=interval) as client:
+            for b in candidates:
+                try:
+                    quote = fetch_booster_price(client, b.appid, settings.currency)
+                except RateLimited:
+                    typer.secho(
+                        "Steam rate-limited us; stopping. Re-run later to continue.",
+                        fg=typer.colors.YELLOW,
+                    )
+                    break
+                except FetchError as exc:
+                    typer.secho(f"  skipped appid {b.appid}: {exc}", fg=typer.colors.YELLOW)
+                    continue
+                if quote is not None:
+                    quotes[b.appid] = quote
+
+        results = scan_booster_arbitrage(
+            store, quotes, currency=settings.currency, min_listings=min_listings, top=max_games
+        )
+
+    if not results:
+        typer.echo("No booster prices found for the checked games (packs may be unlisted).")
+        return
+    typer.secho(
+        f"\nBooster-vs-contents ({settings.currency}) — modeled, NOT trading advice:", bold=True
+    )
+    for r in results:
+        game = names.get(r.appid, f"App {r.appid}")
+        flag = "ARB" if (r.liquid and r.profitable) else ("thin" if r.profitable else "   ")
+        typer.echo(
+            f"  margin {r.margin_cents / 100:>+7.2f}  pack {r.booster_cost.amount:.2f} vs "
+            f"contents≈{r.contents_ev_net.amount:.2f}  {game} [{r.confidence.value}] {flag}"
+        )
+    typer.secho(
+        "\nResearch only. EV of 3 random cards, resale net of fee — high variance. "
+        "Buy/unpack/sell manually in Steam.",
+        dim=True,
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
