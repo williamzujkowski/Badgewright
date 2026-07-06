@@ -307,6 +307,22 @@ class Store:
         ).fetchall()
         return [MarketItem(appid=r["appid"], market_hash_name=r["market_hash_name"]) for r in rows]
 
+    def list_inventory(self) -> list[UserCardInventory]:
+        """Every held inventory row across all apps (for whole-portfolio valuation)."""
+        rows = self.conn.execute(
+            "SELECT appid, market_hash_name, quantity, is_foil FROM user_card_inventory "
+            "ORDER BY appid, market_hash_name"
+        ).fetchall()
+        return [
+            UserCardInventory(
+                appid=r["appid"],
+                market_hash_name=r["market_hash_name"],
+                quantity=r["quantity"],
+                is_foil=bool(r["is_foil"]),
+            )
+            for r in rows
+        ]
+
     def price_history(self, appid: int, market_hash_name: str) -> list[PriceSnapshot]:
         """All price observations for an item, oldest first."""
         rows = self.conn.execute(
@@ -323,9 +339,23 @@ class Store:
         ).fetchall()
         return [self._row_to_snapshot(r) for r in rows]
 
-    def latest_price(self, appid: int, market_hash_name: str) -> PriceSnapshot | None:
+    def latest_price(
+        self, appid: int, market_hash_name: str, *, currency: str | None = None
+    ) -> PriceSnapshot | None:
+        """The newest price snapshot for an item.
+
+        By default returns the single newest snapshot regardless of currency. When
+        ``currency`` is given, returns the newest snapshot whose *lowest ask* is in that
+        currency (skipping stray fetches in other currencies) — so a later fetch in a
+        different currency can't mask a usable price. Returns ``None`` if none matches.
+        """
         history = self.price_history(appid, market_hash_name)
-        return history[-1] if history else None
+        if currency is None:
+            return history[-1] if history else None
+        for snap in reversed(history):
+            if snap.lowest is not None and snap.lowest.currency == currency:
+                return snap
+        return None
 
     def _row_to_snapshot(self, r: sqlite3.Row) -> PriceSnapshot:
         item = MarketItem(appid=r["appid"], market_hash_name=r["market_hash_name"])

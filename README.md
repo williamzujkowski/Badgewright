@@ -92,6 +92,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo catalog import [--online\|--file F]` | Import the card-set catalog (game → set size). |
 | `sbo steamid <id\|url\|vanity> [--online]` | Resolve a SteamID64 (no login). |
 | `sbo inventory import --steamid X [--online]` | Ingest your public card inventory. |
+| `sbo inventory value [--top N]` | Value your held cards at the current market (offline; seed prices first). |
 | `sbo badges import [--online]` | Ingest your public badge levels. |
 | `sbo cards discover --appid N [--online]` | Enumerate a game's full card list. |
 | `sbo prices refresh [--online]` | Cache market prices (priceoverview). |

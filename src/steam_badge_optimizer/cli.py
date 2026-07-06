@@ -262,6 +262,62 @@ def inventory_import(
         )
 
 
+@inventory_app.command("value")
+def inventory_value(
+    top: int = typer.Option(20, help="How many holdings to list (totals cover everything)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Value your held cards at the current market (research only; buy/sell manually).
+
+    Offline: uses cached prices. Seed them first with `sbo prices refresh --online`.
+    Values each holding at its latest lowest ask; unpriced holdings are flagged, and the
+    total is a floor over the priced ones.
+    """
+    if top < 1:
+        typer.secho("--top must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    from .analytics import value_inventory
+    from .db import Store
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    with Store(settings.db_path) as store:
+        names = {a.appid: a.name for a in store.list_apps()}
+        valuation = value_inventory(store, currency=settings.currency, top=top)
+
+    if not valuation.holdings:
+        typer.echo(
+            "No card inventory to value. Import it first:\n"
+            "  sbo inventory import --steamid <you> --online"
+        )
+        raise typer.Exit(code=1)
+
+    typer.secho(
+        f"Inventory value (priced floor): {valuation.total_value.amount:.2f} {valuation.currency}",
+        bold=True,
+    )
+    typer.echo(
+        f"  {valuation.priced_count} holding(s) priced, "
+        f"{valuation.unpriced_count} unpriced"
+        + ("  — seed prices with `sbo prices refresh --online`" if valuation.unpriced_count else "")
+    )
+    for h in valuation.holdings:
+        game = names.get(h.appid, f"App {h.appid}")
+        foil = " (foil)" if h.is_foil else ""
+        if h.line_value is not None and h.unit_price is not None:
+            typer.echo(
+                f"  {h.line_value.amount:>8.2f}  {h.quantity:>3}x @ {h.unit_price.amount:.2f}  "
+                f"{game}{foil}"
+            )
+        else:
+            typer.echo(f"  {'—':>8}  {h.quantity:>3}x  {game}{foil}  [{'; '.join(h.signals)}]")
+    typer.secho(
+        "\nResearch only. Values are current market floors; sell/hold decisions are yours.",
+        dim=True,
+    )
+
+
 @badges_app.command("import")
 def badges_import(
     file: str | None = typer.Option(None, help="Path to a saved GetBadges JSON (offline)."),

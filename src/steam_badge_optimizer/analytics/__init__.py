@@ -12,6 +12,7 @@ from .gem_economy import (
     refresh_sack_price,
     sack_of_gems_item,
 )
+from .inventory_valuation import HoldingValue, InventoryValuation, value_inventory
 from .market_scan import CardWeakness, SetSignal, scan_sets, scan_weakness
 
 __all__ = [
@@ -21,6 +22,8 @@ __all__ = [
     "CandidateGame",
     "CardWeakness",
     "GemValue",
+    "HoldingValue",
+    "InventoryValuation",
     "SetSignal",
     "booster_crafting_cost_gems",
     "detect_anomalies",
@@ -33,4 +36,5 @@ __all__ = [
     "scan_sets",
     "scan_weakness",
     "select_candidate_games",
+    "value_inventory",
 ]
