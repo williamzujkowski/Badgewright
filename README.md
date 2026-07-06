@@ -105,6 +105,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo optimize [--budget B] [--badge-level L]` | Cheapest plan to a target level/budget (greedy). |
 | `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |
 | `sbo report cheapest-badges --out F` | Export the cheapest-badges ranking (CSV / inert HTML). |
+| `sbo report inventory-value --out F` | Export your inventory valuation (CSV / inert HTML). |
 | `sbo delete-all [--yes]` | Purge all local data (DB + journal sidecars). |
 
 ## Run with Docker

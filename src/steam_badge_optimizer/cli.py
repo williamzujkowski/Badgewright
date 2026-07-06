@@ -599,6 +599,45 @@ def report_cheapest_badges(
     typer.secho("Research only. Buy cards manually in Steam.", dim=True)
 
 
+@report_app.command("inventory-value")
+def report_inventory_value(
+    out: str = typer.Option(..., help="Output file path (.csv or .html)."),
+    top: int = typer.Option(200, help="How many holdings to export (total covers everything)."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Export your inventory valuation to CSV or inert HTML for review. Never trades."""
+    from datetime import UTC, datetime
+
+    from .analytics import value_inventory
+    from .db import Store
+    from .reports import write_inventory_value
+
+    if top <= 0:
+        typer.secho("--top must be positive.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if not out.lower().endswith((".csv", ".html", ".htm")):
+        typer.secho("--out must end in .csv or .html.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    with Store(settings.db_path) as store:
+        valuation = value_inventory(store, currency=settings.currency, top=top)
+        names = {a.appid: a.name for a in store.list_apps()}
+    count = write_inventory_value(valuation, names, out, now=datetime.now(UTC))
+    if count == 0:
+        typer.secho(
+            "Wrote an empty report — no held cards to value (import your inventory first).",
+            fg=typer.colors.YELLOW,
+        )
+    else:
+        typer.secho(
+            f"Wrote {count} holding(s), total {valuation.total_value.amount:.2f} "
+            f"{valuation.currency} (priced floor), to {out}.",
+            fg=typer.colors.GREEN,
+        )
+    typer.secho("Research only. Sell/hold decisions are yours, made manually in Steam.", dim=True)
+
+
 @cards_app.command("discover")
 def cards_discover(
     appid: int | None = typer.Option(None, help="Discover one app's cards."),
