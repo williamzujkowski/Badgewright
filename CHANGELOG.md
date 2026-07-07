@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+
+- The version now lives in exactly one place — `pyproject.toml`. `__version__` and the
+  `User-Agent` are derived from the installed package metadata (#40), so a release is a
+  one-line bump and the User-Agent can no longer drift from the real version. CI also now
+  runs on Python 3.14 and the Docker image ships on it.
+
 ## [1.3.1] - 2026-07-07
 
 ### Fixed
