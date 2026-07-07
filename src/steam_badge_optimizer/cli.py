@@ -18,6 +18,7 @@ import typer
 if TYPE_CHECKING:
     from .analytics import BadgeSetCost
     from .db import Store
+    from .optimize.cost import BadgeCost
 
 from . import __version__
 from .config import (
@@ -417,15 +418,47 @@ def prices_refresh(
     )
 
 
+def _auto_fetch_candidates(
+    store: Store, incomplete: list[BadgeCost], *, max_games: int
+) -> list[int]:
+    """Pick the incomplete badges worth auto-fetching: games the user is actually involved
+    with — owns >=1 card OR has partial (1..4) badge progress. Most-owned first (closest to
+    a badge), then appid; capped at ``max_games``. This keeps the fetch bounded to the
+    user's relevant games rather than the whole 15k-game catalog."""
+    scored: list[tuple[int, int]] = []
+    for badge in incomplete:
+        owned = store.inventory_for_app(badge.appid)
+        n_owned = sum(1 for qty in owned.values() if qty > 0)
+        progress = store.get_badge_progress(badge.appid)
+        partial = progress is not None and 1 <= progress.level < MAX_NORMAL_BADGE_LEVEL
+        if n_owned > 0 or partial:
+            scored.append((n_owned, badge.appid))
+    scored.sort(key=lambda pair: (-pair[0], pair[1]))
+    return [appid for _n, appid in scored[:max_games]]
+
+
 @app.command()
 def optimize(
     budget: float | None = typer.Option(None, help="Spend cap for the plan (e.g. 50 = $50)."),
     current_level: int | None = typer.Option(None, help="Your current Steam account level."),
     target_level: int | None = typer.Option(None, help="Desired Steam account level."),
     badge_level: int = typer.Option(5, help="Target level for each game badge (1-5)."),
+    auto_fetch: bool = typer.Option(
+        False,
+        "--auto-fetch",
+        help="Discover + price the games you own cards in / have partial progress on, then "
+        "plan (opt-in network; bounded by --max-games, rate-polite, 429-hard-stop).",
+    ),
+    max_games: int = typer.Option(10, help="Cap on games to auto-fetch (with --auto-fetch)."),
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Compute the cheapest badge-completion plan (greedy by cost-per-XP)."""
+    """Compute the cheapest badge-completion plan (greedy by cost-per-XP).
+
+    Offline by default. With --auto-fetch it first discovers + prices your relevant
+    incomplete games (bounded, rate-polite) so one command closes the loop. It fills
+    discovery/pricing GAPS; it won't re-price a game whose cached price is merely stale
+    (use `sbo prices refresh` for that).
+    """
     from decimal import ROUND_HALF_UP, Decimal
 
     from .config import MAX_NORMAL_BADGE_LEVEL, account_xp_between
@@ -438,6 +471,9 @@ def optimize(
         raise typer.Exit(code=2)
     if budget is not None and budget < 0:
         typer.secho("--budget must be >= 0.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if auto_fetch and max_games < 1:
+        typer.secho("--max-games must be >= 1.", fg=typer.colors.RED)
         raise typer.Exit(code=2)
 
     settings = Settings.resolve(data_dir=data_dir, currency=None)
@@ -463,6 +499,55 @@ def optimize(
     with Store(settings.db_path) as store:
         report = compute_costs(store, target_level=badge_level, currency=currency)
         plan = build_plan(report, budget=money_budget, target_xp=target_xp)
+
+        if auto_fetch:
+            appids = _auto_fetch_candidates(store, plan.incomplete, max_games=max_games)
+            if not appids:
+                typer.secho(
+                    "Nothing to auto-fetch: no incomplete badges for games you own cards in "
+                    "or have partial progress on. Import your inventory/badges first.",
+                    fg=typer.colors.YELLOW,
+                )
+            else:
+                from .models import MarketItem
+                from .sources.card_discovery import CardDiscoveryError, import_cards
+                from .sources.http_client import FetchError, RateLimited, SafeClient
+                from .sources.steam_market import refresh_prices
+
+                set_sizes = {bs.appid: bs.set_size for bs in store.list_badge_sets()}
+                names = {a.appid: a.name for a in store.list_apps()}
+                interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+                typer.secho(
+                    f"Auto-fetching {len(appids)} relevant game(s) at ~1 req/{interval:.0f}s "
+                    "(bounded by --max-games; Ctrl-C is safe).",
+                    bold=True,
+                )
+                with SafeClient(min_interval_s=interval) as client:
+                    for appid in appids:
+                        size = set_sizes.get(appid)
+                        if size is None:
+                            continue
+                        game = names.get(appid, f"App {appid}")
+                        try:
+                            import_cards(store, client, appid, size)
+                            items = [
+                                MarketItem(appid=appid, market_hash_name=c.market_hash_name)
+                                for c in store.cards_for_app(appid, include_foil=False)
+                            ]
+                            refresh_prices(store, client, items, currency)
+                            typer.echo(f"  fetched {game} (appid {appid})")
+                        except RateLimited:
+                            typer.secho(
+                                "Steam rate-limited us; stopping auto-fetch. Re-run later.",
+                                fg=typer.colors.YELLOW,
+                            )
+                            break
+                        except (CardDiscoveryError, FetchError) as exc:
+                            typer.secho(f"  skipped appid {appid}: {exc}", fg=typer.colors.YELLOW)
+                            continue
+                # Re-plan with the freshly fetched cards + prices.
+                report = compute_costs(store, target_level=badge_level, currency=currency)
+                plan = build_plan(report, budget=money_budget, target_xp=target_xp)
 
     if (
         not plan.chosen

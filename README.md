@@ -75,7 +75,9 @@ Reads only **public** data — your profile/inventory must be public. No login, 
 ```bash
 sbo catalog import --online
 sbo inventory import --steamid <your-vanity-or-SteamID64> --online   # your owned cards
-sbo optimize --budget 5                                              # cheapest plan under $5
+# One command closes the loop: --auto-fetch discovers + prices the games you own cards in
+# / have partial progress on (bounded, rate-polite, opt-in), then plans.
+sbo optimize --budget 5 --auto-fetch --max-games 10                  # cheapest plan under $5
 sbo report purchase-plan --format html --out plan.html              # export it for review
 ```
 
@@ -134,7 +136,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo market booster-arbitrage --online --confirm` | Flag Booster Packs cheaper than their card contents (research; modeled EV). |
 | `sbo market card-gem-arbitrage [--online --confirm]` | Flag cards cheaper than the gems they yield (research; foils). |
 | `sbo market scan-sets / scan-weakness / anomalies` | Market-intelligence research (never advice). |
-| `sbo optimize [--budget B] [--badge-level L]` | Cheapest plan to a target level/budget (greedy). |
+| `sbo optimize [--budget B] [--badge-level L] [--auto-fetch --max-games N]` | Cheapest plan to a target level/budget (greedy); `--auto-fetch` discovers + prices your relevant games first. |
 | `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |
 | `sbo report cheapest-badges --out F` | Export the cheapest-badges ranking (CSV / inert HTML). |
 | `sbo report inventory-value --out F` | Export your inventory valuation (CSV / inert HTML). |
