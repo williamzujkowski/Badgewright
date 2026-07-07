@@ -119,3 +119,32 @@ class TestCli:
         assert res.exit_code == 0
         assert "Auto-fetching 1 relevant game" in res.stdout
         assert "fetched Half-Life 2 (appid 220)" in res.stdout
+
+    def test_rate_limit_hard_stops_auto_fetch(self, tmp_path, monkeypatch) -> None:
+        # The 429-hard-stop must break the loop and still re-plan (exit 0).
+        import steam_badge_optimizer.sources.card_discovery as cd
+        from steam_badge_optimizer.sources.http_client import RateLimited
+
+        _seed_relevant_incomplete(tmp_path)
+
+        def boom(store, client, appid, set_size):
+            raise RateLimited("https://steamcommunity.com/market/search/render/", None)
+
+        monkeypatch.setattr(cd, "import_cards", boom)
+        res = runner.invoke(app, ["optimize", "--auto-fetch", "--data-dir", str(tmp_path)])
+        assert res.exit_code == 0
+        assert "stopping auto-fetch" in res.stdout.lower()
+
+    def test_fetch_error_skips_and_continues(self, tmp_path, monkeypatch) -> None:
+        import steam_badge_optimizer.sources.card_discovery as cd
+        from steam_badge_optimizer.sources.card_discovery import CardDiscoveryError
+
+        _seed_relevant_incomplete(tmp_path)
+
+        def boom(store, client, appid, set_size):
+            raise CardDiscoveryError("delisted")
+
+        monkeypatch.setattr(cd, "import_cards", boom)
+        res = runner.invoke(app, ["optimize", "--auto-fetch", "--data-dir", str(tmp_path)])
+        assert res.exit_code == 0
+        assert "skipped appid 220" in res.stdout

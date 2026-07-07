@@ -455,7 +455,9 @@ def optimize(
     """Compute the cheapest badge-completion plan (greedy by cost-per-XP).
 
     Offline by default. With --auto-fetch it first discovers + prices your relevant
-    incomplete games (bounded, rate-polite) so one command closes the loop.
+    incomplete games (bounded, rate-polite) so one command closes the loop. It fills
+    discovery/pricing GAPS; it won't re-price a game whose cached price is merely stale
+    (use `sbo prices refresh` for that).
     """
     from decimal import ROUND_HALF_UP, Decimal
 
