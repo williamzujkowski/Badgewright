@@ -12,6 +12,15 @@ ESTIMATED cost to COMPLETE the whole set: the sum of the cards we've already pri
 slots a pessimistic price means a game where we've verified MANY cards are cheap estimates
 lower than one where a single cheap card hides an unknown (possibly expensive) remainder —
 so evidence is rewarded and thin single-card gambles sink. Best-effort over a partial sample.
+
+Evidence gate (#81): a live case picked a 1-priced-card game estimated at $0.15 that
+actually cost $7.26 to finish — one cheap card is weak evidence about a set. So candidates
+are ranked in two tiers: those with at least ``min_priced_fraction`` of the set priced
+(more evidence) come first, then the sparser ones — each tier still cheapest-first. This is
+*non-destructive*: sparse candidates are down-ranked, never excluded, so when every game is
+a lone-cheap-card singleton (the common post-sweep state) the tiers are uniform and the
+order is unchanged. Note: priced-fraction is evidence *coverage*, not *strength* — a game
+can clear the gate on several non-cheap cards; it is a cheap, honest heuristic, not a proof.
 """
 
 from __future__ import annotations
@@ -25,6 +34,10 @@ if TYPE_CHECKING:
 __all__ = ["CandidateGame", "select_candidate_games"]
 
 
+#: Default evidence gate: prefer candidates with at least this fraction of the set priced.
+DEFAULT_MIN_PRICED_FRACTION = 0.34  # ~ need >= 1/3 of the set priced to be "well-evidenced"
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateGame:
     appid: int
@@ -32,6 +45,7 @@ class CandidateGame:
     priced_count: int  # cards of this set we already have a price for
     known_cost_cents: int  # sum of those known prices
     est_completion_cents: int  # known + median-proxy * remaining slots (ranking key)
+    priced_fraction: float  # priced_count / set_size (evidence COVERAGE, not strength)
 
 
 def select_candidate_games(
@@ -39,14 +53,20 @@ def select_candidate_games(
     *,
     currency: str = "USD",
     max_games: int = 5,
+    min_priced_fraction: float = DEFAULT_MIN_PRICED_FRACTION,
 ) -> list[CandidateGame]:
     """Rank incomplete games by estimated cost to complete their set (cheapest first).
 
     Only games with at least one priced card but not a fully-priced set are candidates
-    (a fully-priced set is already rankable by ``rank_cheapest_badges``). Pure function.
+    (a fully-priced set is already rankable by ``rank_cheapest_badges``). Candidates with at
+    least ``min_priced_fraction`` of the set priced rank ahead of sparser ones (evidence
+    gate, #81), each tier cheapest-first; sparse candidates are down-ranked, never excluded.
+    Pure function.
     """
     if max_games < 1:
         raise ValueError("max_games must be >= 1")
+    if not 0.0 <= min_priced_fraction <= 1.0:
+        raise ValueError("min_priced_fraction must be within [0, 1]")
 
     games: list[tuple[int, int, list[int]]] = []
     all_known: list[int] = []
@@ -77,10 +97,16 @@ def select_candidate_games(
             priced_count=len(known),
             known_cost_cents=sum(known),
             est_completion_cents=sum(known) + (set_size - len(known)) * proxy,
+            priced_fraction=len(known) / set_size,
         )
         for appid, set_size, known in games
     ]
-    out.sort(key=lambda c: (c.est_completion_cents, c.appid))
+    # Two-tier evidence gate (#81): well-evidenced candidates (priced_fraction >= threshold)
+    # sort first, then sparser ones — each tier cheapest-first. Non-destructive: an
+    # all-singleton field is one uniform tier, so the order degrades to (est_cost, appid).
+    out.sort(
+        key=lambda c: (c.priced_fraction < min_priced_fraction, c.est_completion_cents, c.appid)
+    )
     return out[:max_games]
 
 
