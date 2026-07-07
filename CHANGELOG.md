@@ -6,12 +6,27 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-07
+
+Hardening & maintenance. No new features.
+
 ### Changed
 
+- **Read-only boundary narrowed to `GET` only** (#31): `ALLOWED_METHODS` was
+  `{GET, HEAD, OPTIONS}` but `SafeClient` only ever GETs, so HEAD/OPTIONS were an
+  advertised-but-unreachable allowance. The allowlist, code, tests, ADR, and `sbo safety`
+  output now all say exactly `GET` (least privilege).
 - The version now lives in exactly one place — `pyproject.toml`. `__version__` and the
   `User-Agent` are derived from the installed package metadata (#40), so a release is a
-  one-line bump and the User-Agent can no longer drift from the real version. CI also now
-  runs on Python 3.14 and the Docker image ships on it.
+  one-line bump and the User-Agent can no longer drift from the real version. CI now runs
+  on Python 3.12/3.13/**3.14** and the Docker image ships on 3.14 (#123).
+
+### Fixed
+
+- `is_host_allowed` no longer over-blocks a valid trailing-dot FQDN like `steamcommunity.com.`
+  (#30); the normalization only strips terminal dots, so suffix spoofs stay rejected.
+- Model string fields (`market_hash_name`, app name) now reject whitespace-only input via a
+  shared `NonBlankStr` type — `min_length=1` alone accepted a lone space (#27).
 
 ## [1.3.1] - 2026-07-07
 
