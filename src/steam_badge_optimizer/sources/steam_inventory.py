@@ -54,7 +54,8 @@ STEAMID64_MIN = 76561197960265728
 
 STEAM_COMMUNITY_APPID = 753
 SACK_OF_GEMS_HASH = "753-Sack of Gems"
-#: Synthetic hash for loose gems (they carry no market_hash_name; only the Sack is listed).
+#: Loose gems' market_hash_name (verified against a real inventory, #112): they DO carry
+#: one, "753-Gems", and are non-marketable with the asset amount = gem count.
 LOOSE_GEMS_HASH = "753-Gems"
 
 
@@ -144,8 +145,10 @@ def _classify_holding(
     ):
         appid = _game_appid(desc, name)
         return (ItemKind.BOOSTER_PACK, appid, name) if appid is not None else None
-    # Loose gems carry no market_hash_name; identify by the item type / class instead.
-    if name is None and ("steam gems" in type_str or internal in ("item_class_7", "gems")):
+    # Loose gems (verified #112): type "Steam Gems" / item_class_7, non-marketable, and
+    # they DO carry market_hash_name "753-Gems" — so match on type/class, not name absence
+    # (the Sack is already returned above, so it can't be misrouted here).
+    if "steam gems" in type_str or internal == "item_class_7":
         return (ItemKind.GEMS, STEAM_COMMUNITY_APPID, LOOSE_GEMS_HASH)
     if name is not None and bool(desc.get("marketable", 0)):
         appid = _game_appid(desc, name)
