@@ -166,3 +166,104 @@ class TestCli:
             )
         assert result.exit_code == 1
         assert "Import failed" in result.output
+
+
+def _inv_json(*items: dict) -> bytes:
+    """Build an inventory JSON envelope from (asset-fields + description) item dicts."""
+    assets, descriptions = [], []
+    for i, it in enumerate(items):
+        cid, iid = f"c{i}", f"i{i}"
+        assets.append({"classid": cid, "instanceid": iid, "amount": str(it.pop("_amount", "1"))})
+        descriptions.append({"classid": cid, "instanceid": iid, **it})
+    return orjson.dumps({"assets": assets, "descriptions": descriptions})
+
+
+def _tag(cat: str, internal: str) -> dict:
+    return {"category": cat, "internal_name": internal}
+
+
+class TestHoldings:
+    def test_classifies_booster_sack_gems_and_other(self) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        raw = _inv_json(
+            {  # a normal card (stays a card, not a holding)
+                "market_hash_name": "440-Heavy",
+                "market_fee_app": 440,
+                "type": "Trading Card",
+                "marketable": 1,
+                "tags": [_tag("cardborder", "cardborder_0")],
+            },
+            {  # booster pack (item_class_5)
+                "market_hash_name": "440-Team Fortress 2 Booster Pack",
+                "market_fee_app": 440,
+                "type": "Booster Pack",
+                "marketable": 1,
+                "tags": [_tag("item_class", "item_class_5")],
+                "_amount": "2",
+            },
+            {  # Sack of Gems
+                "market_hash_name": "753-Sack of Gems",
+                "type": "Steam Gems",
+                "marketable": 1,
+                "tags": [_tag("item_class", "item_class_6")],
+            },
+            {  # loose gems (no market_hash_name; amount = gem count)
+                "type": "Steam Gems",
+                "marketable": 0,
+                "tags": [_tag("item_class", "item_class_7")],
+                "_amount": "5000",
+            },
+            {  # a profile background -> OTHER (marketable community good)
+                "market_hash_name": "440-A Background",
+                "market_fee_app": 440,
+                "type": "Profile Background",
+                "marketable": 1,
+                "tags": [_tag("item_class", "item_class_3")],
+            },
+        )
+        result = inv.parse_inventory_json(raw)
+        assert len(result.cards) == 1  # the card is not a holding
+        by = {h.market_hash_name: h for h in result.holdings}
+        assert by["440-Team Fortress 2 Booster Pack"].kind is ItemKind.BOOSTER_PACK
+        assert by["440-Team Fortress 2 Booster Pack"].appid == 440
+        assert by["440-Team Fortress 2 Booster Pack"].quantity == 2
+        assert by["753-Sack of Gems"].kind is ItemKind.SACK_OF_GEMS
+        assert by["753-Sack of Gems"].appid == 753
+        assert by["753-Gems"].kind is ItemKind.GEMS
+        assert by["753-Gems"].quantity == 5000  # gem count, not copies
+        assert by["440-A Background"].kind is ItemKind.OTHER
+
+    def test_unmarketable_unclassifiable_item_skipped_not_held(self) -> None:
+        raw = _inv_json(
+            {  # a non-marketable emoticon with no special class -> ignored (no holding)
+                "market_hash_name": "440-:emote:",
+                "market_fee_app": 440,
+                "type": "Emoticon",
+                "marketable": 0,
+                "tags": [_tag("item_class", "item_class_4")],
+            },
+        )
+        result = inv.parse_inventory_json(raw)
+        assert result.holdings == [] and result.cards == []
+
+    def test_holdings_persist_and_roundtrip(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        raw = _inv_json(
+            {
+                "market_hash_name": "753-Sack of Gems",
+                "type": "Steam Gems",
+                "marketable": 1,
+                "tags": [_tag("item_class", "item_class_6")],
+                "_amount": "3",
+            },
+        )
+        p = tmp_path / "inv.json"
+        p.write_bytes(raw)
+        with Store.in_memory() as store:
+            result = inv.import_from_file(store, p)  # full parse + persist path
+            assert len(result.holdings) == 1
+            held = store.list_item_holdings()
+            assert len(held) == 1
+            assert held[0].kind is ItemKind.SACK_OF_GEMS and held[0].quantity == 3

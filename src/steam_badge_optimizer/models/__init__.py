@@ -6,7 +6,7 @@ layers serialize and round-trip.
 """
 
 from .badge import BadgeSet, Card, UserBadgeProgress
-from .inventory import UserCardInventory
+from .inventory import ItemKind, UserCardInventory, UserItemHolding
 from .market import MarketItem, PriceSnapshot
 from .money import Money, PriceParseError, parse_steam_price
 from .optimization import Confidence, PurchaseCandidate
@@ -17,6 +17,7 @@ __all__ = [
     "BadgeSet",
     "Card",
     "Confidence",
+    "ItemKind",
     "MarketItem",
     "Money",
     "PriceParseError",
@@ -27,5 +28,6 @@ __all__ = [
     "SteamApp",
     "UserBadgeProgress",
     "UserCardInventory",
+    "UserItemHolding",
     "parse_steam_price",
 ]

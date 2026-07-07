@@ -254,6 +254,11 @@ def inventory_import(
         f"{result.total_assets} assets) into {settings.db_path}.",
         fg=typer.colors.GREEN,
     )
+    if result.holdings:
+        typer.echo(
+            f"Also retained {len(result.holdings)} non-card holding(s) "
+            "(booster packs, gems, sacks, other)."
+        )
     if result.truncated:
         typer.secho(
             f"Warning: inventory was truncated at {max_pages} pages — some cards are "

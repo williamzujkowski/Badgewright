@@ -20,14 +20,14 @@ Design (per the approving vote):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import orjson
 
-from ..models import Card, UserCardInventory
+from ..models import Card, ItemKind, UserCardInventory, UserItemHolding
 from ..models.provenance import SourceKind, SourceRecord
 from .http_client import HTTPStatusError, SafeClient
 
@@ -51,6 +51,11 @@ INVENTORY_TTL_SECONDS = 6 * 3600
 MAX_BYTES = 64 * 1024 * 1024
 MAX_ASSETS = 200_000  # resource guard against an absurd aggregate
 STEAMID64_MIN = 76561197960265728
+
+STEAM_COMMUNITY_APPID = 753
+SACK_OF_GEMS_HASH = "753-Sack of Gems"
+#: Synthetic hash for loose gems (they carry no market_hash_name; only the Sack is listed).
+LOOSE_GEMS_HASH = "753-Gems"
 
 
 class InventoryParseError(ValueError):
@@ -81,6 +86,8 @@ class InventoryResult:
     total_assets: int
     truncated: bool = False
     """True if a paged fetch hit max_pages with more items remaining (partial result)."""
+    holdings: list[UserItemHolding] = field(default_factory=list)
+    """Non-card community items retained (booster packs, gems, sacks, other)."""
 
 
 def _tags_by_category(desc: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -111,6 +118,39 @@ def _is_foil(desc: dict[str, Any], tags: dict[str, dict[str, Any]]) -> bool:
         # cardborder_0 == normal, cardborder_1 == foil. Anything non-zero is foil.
         return str(border.get("internal_name", "")).strip() not in ("cardborder_0", "")
     return "foil" in str(desc.get("type", "")).lower()
+
+
+def _classify_holding(
+    desc: dict[str, Any], tags: dict[str, dict[str, Any]]
+) -> tuple[ItemKind, int, str] | None:
+    """Classify a NON-card 753/6 item into (kind, appid, market_hash_name), or None to skip.
+
+    Recognizes the Sack of Gems, loose gems, booster packs (item class 5 / "Booster Pack"
+    name), and otherwise retains any marketable item as OTHER (backgrounds, emoticons, ...).
+    Non-marketable, unclassifiable items are skipped. Detection uses structural tags where
+    possible; the loose-gems shape is best-effort (validated against a real inventory in a
+    follow-up) and falls back safely to skip.
+    """
+    name = desc.get("market_hash_name")
+    name = name if isinstance(name, str) and name else None
+    item_class = tags.get("item_class") or {}
+    internal = str(item_class.get("internal_name", "")).lower()
+    type_str = str(desc.get("type", "")).lower()
+
+    if name is not None and name.casefold() == SACK_OF_GEMS_HASH.casefold():
+        return (ItemKind.SACK_OF_GEMS, STEAM_COMMUNITY_APPID, name)
+    if name is not None and (
+        name.casefold().endswith("booster pack") or internal == "item_class_5"
+    ):
+        appid = _game_appid(desc, name)
+        return (ItemKind.BOOSTER_PACK, appid, name) if appid is not None else None
+    # Loose gems carry no market_hash_name; identify by the item type / class instead.
+    if name is None and ("steam gems" in type_str or internal in ("item_class_7", "gems")):
+        return (ItemKind.GEMS, STEAM_COMMUNITY_APPID, LOOSE_GEMS_HASH)
+    if name is not None and bool(desc.get("marketable", 0)):
+        appid = _game_appid(desc, name)
+        return (ItemKind.OTHER, appid, name) if appid is not None else None
+    return None
 
 
 def _game_appid(desc: dict[str, Any], market_hash_name: str) -> int | None:
@@ -147,8 +187,10 @@ def parse_inventory_json(raw: bytes) -> InventoryResult:
             key = (str(desc.get("classid")), str(desc.get("instanceid")))
             index[key] = desc
 
-    # Aggregate copies by (appid, market_hash_name).
+    # Aggregate copies by (appid, market_hash_name): cards in `agg`, non-card holdings
+    # (booster packs, gems, sacks, other) in `holdings_agg`.
     agg: dict[tuple[int, str], list[Any]] = {}
+    holdings_agg: dict[tuple[int, str], list[Any]] = {}  # (appid, mhn) -> [quantity, kind]
     skipped = 0
     for asset in assets:
         if not isinstance(asset, dict):
@@ -158,9 +200,21 @@ def parse_inventory_json(raw: bytes) -> InventoryResult:
         if desc is None:
             skipped += 1
             continue
+        try:
+            amount = max(0, int(asset.get("amount", "1")))
+        except (TypeError, ValueError):
+            amount = 1
         tags = _tags_by_category(desc)
         if not _is_trading_card(desc, tags):
-            continue  # a non-card community item (background, emoticon) — ignore, not an error
+            # A non-card community item: retain it as a typed holding if we can classify
+            # it (booster pack, gems, sack, or a marketable "other"); otherwise ignore it
+            # (backgrounds/emoticons that aren't marketable, etc.) — not an error.
+            classified = _classify_holding(desc, tags)
+            if classified is not None:
+                kind, h_appid, h_name = classified
+                h_entry = holdings_agg.setdefault((h_appid, h_name), [0, kind])
+                h_entry[0] += amount
+            continue
         mhn = desc.get("market_hash_name")
         if not isinstance(mhn, str) or not mhn:
             skipped += 1
@@ -169,12 +223,8 @@ def parse_inventory_json(raw: bytes) -> InventoryResult:
         if appid is None:
             skipped += 1
             continue
-        try:
-            amount = int(asset.get("amount", "1"))
-        except (TypeError, ValueError):
-            amount = 1
         entry = agg.setdefault((appid, mhn), [0, desc, tags])
-        entry[0] += max(0, amount)
+        entry[0] += amount
 
     cards: list[ParsedCard] = []
     for (appid, mhn), (quantity, desc, tags) in agg.items():
@@ -191,11 +241,16 @@ def parse_inventory_json(raw: bytes) -> InventoryResult:
             tradable=bool(desc.get("tradable", 1)),
         )
         cards.append(ParsedCard(inventory=inv, card=card))
+    holdings = [
+        UserItemHolding(appid=appid, market_hash_name=mhn, kind=kind, quantity=quantity)
+        for (appid, mhn), (quantity, kind) in holdings_agg.items()
+    ]
     return InventoryResult(
         cards=cards,
         skipped=skipped,
         total_assets=len(assets),
         truncated=bool(data.get("_truncated", False)),
+        holdings=holdings,
     )
 
 
@@ -256,6 +311,8 @@ def _persist(store: Store, result: InventoryResult, source: SourceRecord) -> Non
     for parsed in result.cards:
         store.upsert_card(parsed.card)
         store.upsert_inventory(parsed.inventory)
+    for holding in result.holdings:
+        store.upsert_item_holding(holding)
     store.record_source(source)
 
 
