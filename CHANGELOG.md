@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-07
+
+### Fixed
+
+- **Loose gems were silently dropped from inventory** (#112): validated against a real
+  inventory, loose gems carry `market_hash_name="753-Gems"` and are non-marketable, but the
+  classifier gated the gems branch on the name being absent — so real gem stashes were never
+  retained or valued. Now matched on `type="Steam Gems"` / `item_class_7`. This makes the gem
+  inventory valuation shipped in 1.2.0 actually work for held gems.
+
 ## [1.3.0] - 2026-07-07
 
 Card→gem arbitrage: flag foil cards that are cheaper to buy than the gems they yield.
