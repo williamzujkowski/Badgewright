@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-07
+
+### Fixed
+
+- **plan-cheapest candidate selection was fooled by lone cheap cards** (#81): a game with
+  one $0.03 card estimated at $0.15 actually cost $7.26 to finish (48×). Selection now
+  ranks games with more of their set priced (stronger evidence) ahead of single-card
+  gambles, via a non-destructive two-tier gate — so an all-singleton field is unchanged and
+  the fix only bites when better-evidenced candidates exist. `--budget` is now spent on
+  games likelier to actually be cheap.
+
 ## [1.4.0] - 2026-07-07
 
 ### Added
