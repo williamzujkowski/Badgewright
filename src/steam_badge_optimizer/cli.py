@@ -1148,7 +1148,9 @@ def market_booster_arbitrage(
 
     Note: this samples the CHEAPEST-badge games (the cheap tail), so margins are small and
     it won't surface high-value arbitrage in expensive-card sets. The estimate is an
-    optimistic ceiling on a high-variance 3-card draw — never a guaranteed profit.
+    optimistic ceiling on a high-variance 3-card draw — never a guaranteed profit. It also
+    refreshes each candidate's card 24h volumes (priceoverview) so resale demand — and thus
+    the "ARB" (confirmed-liquid) flag — is determinable; a sweep alone only gives asks.
     """
     if max_games < 1:
         typer.secho("--max-games must be >= 1.", fg=typer.colors.RED)
@@ -1163,8 +1165,10 @@ def market_booster_arbitrage(
 
     from .analytics import rank_cheapest_badges, scan_booster_arbitrage
     from .db import Store
+    from .models import MarketItem
     from .sources.booster_market import BoosterQuote, fetch_booster_price
     from .sources.http_client import FetchError, RateLimited, SafeClient
+    from .sources.steam_market import refresh_prices
 
     settings = Settings.resolve(data_dir=data_dir, currency=None)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -1180,11 +1184,25 @@ def market_booster_arbitrage(
         names = {a.appid: a.name for a in store.list_apps()}
         quotes: dict[int, BoosterQuote] = {}
         typer.echo(
-            f"Fetching booster prices for {len(candidates)} game(s) at ~1 req/{interval:.0f}s."
+            f"Refreshing card volumes + booster prices for {len(candidates)} game(s) "
+            f"at ~1 req/{interval:.0f}s."
         )
         with SafeClient(min_interval_s=interval) as client:
             for b in candidates:
                 try:
+                    # Enrich cards that have no 24h volume yet (priceoverview gives volume;
+                    # sweep/search only give asks). Skip cards already enriched so repeat
+                    # runs stay cheap. Then fetch the booster price.
+                    need_volume = [
+                        MarketItem(appid=b.appid, market_hash_name=c.market_hash_name)
+                        for c in store.cards_for_app(b.appid, include_foil=False)
+                        if not any(
+                            s.volume is not None
+                            for s in store.price_history(b.appid, c.market_hash_name)
+                        )
+                    ]
+                    if need_volume:
+                        refresh_prices(store, client, need_volume, settings.currency, force=True)
                     quote = fetch_booster_price(client, b.appid, settings.currency)
                 except RateLimited:
                     typer.secho(

@@ -42,16 +42,21 @@ def _results(entries: list[dict]) -> httpx.Response:
     )
 
 
+PRICEOVERVIEW = "https://steamcommunity.com/market/priceoverview/"
+
+
 def _price(
     store: Store,
     appid: int,
     name: str,
     cents: int,
     *,
-    listings: int = 100,
     volume: int = 50,  # 24h sales = resale demand; a card needs this to count as liquid
+    listings: int | None = None,
     currency: str = "USD",
 ) -> None:
+    # priceoverview-SHAPED snapshot: carries 24h `volume`. This is what production uses to
+    # establish resale demand — a sweep/search snapshot has `listings` (asks) but NO volume.
     store.upsert_card(Card(appid=appid, market_hash_name=name))
     store.add_price_snapshot(
         PriceSnapshot(
@@ -60,11 +65,35 @@ def _price(
             listings=listings,
             volume=volume,
             source=SourceRecord(
+                kind=SourceKind.STEAM_MARKET,
+                url=PRICEOVERVIEW,
+                fetched_at=datetime.now(UTC),
+                parser_version="1",
+                raw_sha256=SourceRecord.sha256_of(f"po{name}{cents}{currency}".encode()),
+                cache_ttl_seconds=86400,
+            ),
+        )
+    )
+
+
+def _price_search_only(
+    store: Store, appid: int, name: str, cents: int, *, listings: int = 100, currency: str = "USD"
+) -> None:
+    # sweep/search-SHAPED snapshot: `listings` (asks) but NO volume — the realistic state
+    # before any priceoverview enrichment.
+    store.upsert_card(Card(appid=appid, market_hash_name=name))
+    store.add_price_snapshot(
+        PriceSnapshot(
+            item=MarketItem(appid=appid, market_hash_name=name),
+            lowest=Money(cents, currency),
+            listings=listings,
+            volume=None,
+            source=SourceRecord(
                 kind=SourceKind.STEAM_MARKET_SEARCH,
                 url=SEARCH,
                 fetched_at=datetime.now(UTC),
                 parser_version="1",
-                raw_sha256=SourceRecord.sha256_of(f"{name}{cents}{currency}".encode()),
+                raw_sha256=SourceRecord.sha256_of(f"se{name}{cents}{currency}".encode()),
                 cache_ttl_seconds=86400,
             ),
         )
@@ -196,6 +225,17 @@ class TestScanBoosterArbitrage:
             store.upsert_card(Card(appid=1, market_hash_name="1-B"))  # unpriced card in set
             assert scan_booster_arbitrage(store, {1: self._quote(1, 50)}, currency="USD") == []
 
+    def test_partial_set_vs_catalog_size_skipped(self, tmp_path) -> None:
+        # #109: all discovered cards priced, but fewer than the catalog set_size -> skip
+        # (EV over a cheap subset would be biased low).
+        from steam_badge_optimizer.models import BadgeSet
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=3))
+            _price(store, 1, "1-A", 100)
+            _price(store, 1, "1-B", 100)  # only 2 of 3 known
+            assert scan_booster_arbitrage(store, {1: self._quote(1, 50)}, currency="USD") == []
+
     def test_thin_pack_not_liquid_but_still_listed(self, tmp_path) -> None:
         with Store(tmp_path / "t.sqlite3") as store:
             for i in range(3):
@@ -250,13 +290,25 @@ class TestCli:
         assert res.exit_code == 2
 
     @respx.mock
-    def test_end_to_end_flags_a_pack(self, tmp_path) -> None:
+    def test_end_to_end_enriches_volume_then_flags_arb(self, tmp_path, monkeypatch) -> None:
+        # #108 regression: cards start SEARCH-only (no volume) — the realistic post-sweep
+        # state. The command must enrich them via priceoverview (which carries volume) for
+        # the resale-demand gate — and thus the "ARB" flag — to be reachable at all.
+        import time
+
         from typer.testing import CliRunner
 
         from steam_badge_optimizer.cli import app
         from steam_badge_optimizer.config import Settings
         from steam_badge_optimizer.models import BadgeSet, SteamApp
 
+        monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)  # skip rate-limit sleeps
+        respx.get(PRICEOVERVIEW).mock(
+            return_value=httpx.Response(
+                200,
+                content=orjson.dumps({"success": True, "lowest_price": "$1.00", "volume": "50"}),
+            )
+        )
         respx.get(SEARCH).mock(
             return_value=_results([_entry("220-HL2 Booster Pack", 200, 20, "Booster Pack")])
         )
@@ -266,15 +318,15 @@ class TestCli:
             store.upsert_app(SteamApp(appid=220, name="Half-Life 2"))
             store.upsert_badge_set(BadgeSet(appid=220, set_size=3))
             for i in range(3):
-                _price(store, 220, f"220-C{i}", 100)
+                _price_search_only(store, 220, f"220-C{i}", 100)  # no volume yet
         res = CliRunner().invoke(
             app,
             ["market", "booster-arbitrage", "--online", "--confirm", "--data-dir", str(tmp_path)],
         )
         assert res.exit_code == 0
-        assert "Booster-vs-contents" in res.stdout
         assert "Half-Life 2" in res.stdout
-        assert "ARB" in res.stdout  # profitable + liquid
+        assert "ARB" in res.stdout  # reachable ONLY because enrichment added volume
+        assert respx.calls.call_count >= 4  # 3 card priceoverviews + 1 booster search
 
     def _seed_candidate(self, data_dir) -> None:
         from steam_badge_optimizer.config import Settings
