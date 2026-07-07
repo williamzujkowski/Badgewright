@@ -1329,8 +1329,8 @@ def market_card_gem_arbitrage(
             f"[{r.confidence.value}] {flag}"
         )
     typer.secho(
-        "\nResearch only. Gem value is mark-to-market and prices move; realizing it means "
-        "selling gems (net ~15% less). Act manually in Steam.",
+        "\nResearch only. gems≈ is the NET realizable value (after the ~15% gem-sale fee); "
+        "gem prices move, so treat it as speculative. Act manually in Steam.",
         dim=True,
     )
 

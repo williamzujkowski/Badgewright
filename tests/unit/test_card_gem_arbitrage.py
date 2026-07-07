@@ -61,16 +61,27 @@ def _goo(store: Store, appid: int, name: str, value: int, *, border: int = 1) ->
 class TestScan:
     def test_flags_foil_cheaper_than_its_gems(self, tmp_path) -> None:
         with Store(tmp_path / "t.sqlite3") as store:
-            _sack(store, 50)  # $0.50 / 1000 gems => 0.05c/gem
+            _sack(store, 50)  # $0.50 / 1000 gems => 0.05c/gem gross, /1.15 net
             _card(store, 570, "570-Razor (Foil)", is_foil=True)
-            _goo(store, 570, "570-Razor (Foil)", 800)  # 800 gems => 40c
+            _goo(store, 570, "570-Razor (Foil)", 800)  # gross 40c, net 800*0.05/1.15 = 34.8 -> 35
             _price(store, 570, "570-Razor (Foil)", 25)  # card costs 25c
             res = scan_card_gem_arbitrage(store, currency="USD")
         assert len(res) == 1
         r = res[0]
-        assert r.gem_value == Money(40, "USD")  # 800 * 0.05c
-        assert r.margin_cents == 40 - 25 and r.profitable
+        assert r.gem_value == Money(35, "USD")  # NET realizable value, not gross 40
+        assert r.margin_cents == 35 - 25 and r.profitable
         assert r.confidence.value == "low"  # never above LOW
+
+    def test_gross_but_not_net_band_not_flagged(self, tmp_path) -> None:
+        # Card cost between the net (35) and gross (40) gem value must NOT be flagged ARB
+        # (it loses money once you pay the ~15% fee to sell the gems).
+        with Store(tmp_path / "t.sqlite3") as store:
+            _sack(store, 50)
+            _card(store, 570, "570-Razor (Foil)", is_foil=True)
+            _goo(store, 570, "570-Razor (Foil)", 800)  # gross 40, net 35
+            _price(store, 570, "570-Razor (Foil)", 38)  # 35 < 38 < 40
+            res = scan_card_gem_arbitrage(store, currency="USD")
+        assert len(res) == 1 and not res[0].profitable  # net margin 35-38 < 0
 
     def test_no_sack_price_returns_empty(self, tmp_path) -> None:
         with Store(tmp_path / "t.sqlite3") as store:
@@ -101,10 +112,10 @@ class TestScan:
         with Store(tmp_path / "t.sqlite3") as store:
             _sack(store, 50)
             _card(store, 570, "570-X (Foil)", is_foil=True)
-            _goo(store, 570, "570-X (Foil)", 100)  # 100 gems => 5c
+            _goo(store, 570, "570-X (Foil)", 100)  # 100 gems => net 100*0.05/1.15 = 4.3 -> 4c
             _price(store, 570, "570-X (Foil)", 200)  # card 200c
             res = scan_card_gem_arbitrage(store, currency="USD")
-        assert res[0].margin_cents == 5 - 200 and not res[0].profitable
+        assert res[0].margin_cents == 4 - 200 and not res[0].profitable
 
     def test_wrong_currency_price_skipped(self, tmp_path) -> None:
         with Store(tmp_path / "t.sqlite3") as store:
@@ -123,8 +134,8 @@ class TestScan:
                 _goo(store, 570, name, goo)
                 _price(store, 570, name, cost)
             res = scan_card_gem_arbitrage(store, currency="USD")
-        # C1: 2000*0.05=100 -30 = 70; C0: 40-25=15 -> C1 first
-        assert res[0].market_hash_name == "570-C1 (Foil)" and res[0].margin_cents == 70
+        # net values: C1 2000*0.05/1.15=87 -30 = 57; C0 35-25=10 -> C1 first
+        assert res[0].market_hash_name == "570-C1 (Foil)" and res[0].margin_cents == 57
 
 
 class TestCli:

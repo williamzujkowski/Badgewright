@@ -7,9 +7,11 @@ turning it into gems is (at current gem prices) an arbitrage.
 
 **Research, not advice — Badgewright never turns a card into gems.** This is almost
 entirely a **foil** phenomenon: a normal card yields only a handful of gems (worth a
-sub-cent), so it can essentially never beat its market ask; foils yield ~10x. The gem
-value is marked to market (gross); *realizing* it means selling the gems on as a Sack, which
-nets the ~15% fee — so the margin is an optimistic ceiling and confidence is capped at LOW.
+sub-cent), so it can essentially never beat its market ask; foils yield ~10x. Realizing the
+gems as cash means selling them on as a Sack, which nets Steam's ~15% fee — so the ``ARB``
+flag is computed on the **net** per-gem value (like the booster-arbitrage sale), not the
+gross mark-to-market ceiling, to avoid flagging cards that lose money after the fee. Gem
+prices move, so confidence is capped at LOW regardless.
 """
 
 from __future__ import annotations
@@ -34,8 +36,8 @@ class CardGemArbitrage:
     is_foil: bool
     card_cost: Money  # market lowest ask
     goo_value: int  # gems the card yields
-    gem_value: Money  # goo_value x per-gem, marked to market (gross)
-    margin_cents: int  # gem_value - card_cost (SIGNED; positive = arbitrage)
+    gem_value: Money  # goo_value x per-gem NET of the ~15% sale fee (realizable cash)
+    margin_cents: int  # gem_value(net) - card_cost (SIGNED; positive = arbitrage)
     confidence: Confidence
     signals: list[str] = field(default_factory=list)
 
@@ -60,7 +62,9 @@ def scan_card_gem_arbitrage(
     sack = latest_sack_price(store, currency=currency)
     if sack is None or sack.lowest is None:
         return []  # can't value gems without a Sack price
-    per_gem = gem_value(sack.lowest).cents_per_gem  # Decimal cents/gem (gross)
+    gv = gem_value(sack.lowest)
+    per_gem_net = gv.net_cents_per_gem  # what you'd clear selling the gems on (after fee)
+    per_gem_gross = gv.cents_per_gem  # mark-to-market ceiling (before fee)
 
     out: list[CardGemArbitrage] = []
     for card in store.list_cards(foil_only=foil_only):
@@ -70,9 +74,12 @@ def scan_card_gem_arbitrage(
         latest = store.latest_price(card.appid, card.market_hash_name, currency=currency)
         if latest is None or latest.lowest is None or latest.lowest.currency != currency:
             continue
-        gem_value_cents = int((per_gem * goo.goo_value).to_integral_value(rounding=ROUND_HALF_UP))
-        margin = gem_value_cents - latest.lowest.cents
-        signals = ["gem value is mark-to-market; realizing it means selling gems (net ~15% less)"]
+        net_cents = int((per_gem_net * goo.goo_value).to_integral_value(rounding=ROUND_HALF_UP))
+        gross_cents = int((per_gem_gross * goo.goo_value).to_integral_value(rounding=ROUND_HALF_UP))
+        # Flag on the NET realizable value (selling the gems costs the ~15% fee), never gross,
+        # so a card in the gross-but-not-net band isn't mislabeled a profit.
+        margin = net_cents - latest.lowest.cents
+        signals = [f"net of the ~15% gem-sale fee (gross ceiling ≈ {gross_cents / 100:.2f})"]
         if not card.is_foil:
             signals.append("normal card: gem yield is tiny — arbitrage here is unlikely")
         out.append(
@@ -82,7 +89,7 @@ def scan_card_gem_arbitrage(
                 is_foil=card.is_foil,
                 card_cost=latest.lowest,
                 goo_value=goo.goo_value,
-                gem_value=Money(max(gem_value_cents, 0), currency),
+                gem_value=Money(max(net_cents, 0), currency),  # net realizable value
                 margin_cents=margin,
                 confidence=Confidence.LOW,  # gem prices move; speculative, never above LOW
                 signals=signals,
