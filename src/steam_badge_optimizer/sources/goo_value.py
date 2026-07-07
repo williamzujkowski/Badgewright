@@ -27,6 +27,7 @@ from urllib.parse import quote
 from ..config import CURRENCY_IDS
 from ..models import CardGooValue
 from ..models.provenance import SourceKind, SourceRecord
+from ..safety import SafetyViolationError
 from .http_client import FetchError, RateLimited, SafeClient
 
 if TYPE_CHECKING:
@@ -96,13 +97,16 @@ def fetch_goo_params(
 
     Raises :class:`RateLimited` (429) so callers can hard-stop; other errors -> None.
     """
-    url = LISTING_RENDER_URL.format(hash=quote(market_hash_name))
+    # safe="" encodes any "/" in the card name so it can't alter the URL path (mirrors
+    # sources/steamid.py). A name that still trips the safety boundary (e.g. contains a
+    # forbidden action word) skips the card rather than crashing a bulk run.
+    url = LISTING_RENDER_URL.format(hash=quote(market_hash_name, safe=""))
     params = {"count": 1, "currency": CURRENCY_IDS.get(currency.upper(), 1), "format": "json"}
     try:
         resp = client.get(url, params=params, max_bytes=MAX_RENDER_BYTES)
     except RateLimited:
         raise
-    except FetchError:
+    except (FetchError, SafetyViolationError):
         return None
     try:
         return _parse_goo_params(resp.json())

@@ -102,6 +102,24 @@ class TestFetchCardGoo:
         )
 
     @respx.mock
+    def test_slash_in_name_is_encoded_into_path(self) -> None:
+        # A "/" in the card name must be percent-encoded so it can't alter the URL path.
+        route = respx.get(url__regex=RENDER_RE).mock(return_value=_render(570, 4, 0))
+        respx.get(GOO_VALUE_URL).mock(return_value=_goo("25"))
+        with SafeClient(min_interval_s=0) as c:
+            fetch_card_goo(c, Card(appid=570, market_hash_name="570/evil", is_foil=False))
+        # raw_path is the wire form; the "/" must be percent-encoded (no path breakout).
+        raw_path = route.calls.last.request.url.raw_path
+        assert b"570%2Fevil" in raw_path and b"/render/" in raw_path
+
+    def test_forbidden_fragment_in_name_skips_not_crashes(self, tmp_path) -> None:
+        # A name tripping the safety boundary must skip the card (failed), never crash.
+        cards = [Card(appid=570, market_hash_name="570-consumeitem card", is_foil=True)]
+        with Store(tmp_path / "t.sqlite3") as store, SafeClient(min_interval_s=0) as c:
+            res = refresh_goo_values(store, c, cards)
+        assert res.failed == 1 and res.fetched == 0
+
+    @respx.mock
     def test_none_when_item_type_unscrapeable(self) -> None:
         respx.get(url__regex=RENDER_RE).mock(
             return_value=httpx.Response(200, content=orjson.dumps({"assets": {}}))
