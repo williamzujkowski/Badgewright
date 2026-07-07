@@ -79,6 +79,37 @@ sbo optimize --budget 5                                              # cheapest 
 sbo report purchase-plan --format html --out plan.html              # export it for review
 ```
 
+## Quickstart: arbitrage & inventory value
+
+Surface where the market is mispriced and what your own inventory is worth — all read-only,
+all **research, not advice**. You execute every trade manually in Steam; Badgewright never
+buys, sells, crafts, or turns anything into gems. Every figure is a modeled estimate (gem
+prices move; a "cheap" listing can vanish on purchase), so treat flags as leads to verify.
+
+```bash
+# What are gems worth in real money, and what does a booster cost to craft?
+sbo market gems --online --confirm
+
+# Value YOUR inventory at market — cards, gems, sacks, booster packs (offline; seed prices
+# with `sbo prices refresh --online` and the gem price with `sbo market gems` first).
+sbo inventory import --steamid <you> --online
+sbo prices refresh --online
+sbo inventory value --top 20
+sbo report inventory-value --out inventory.html      # shareable CSV / inert HTML
+
+# Booster packs cheaper than reselling their 3 cards (enriches card 24h volume so the
+# "ARB" flag is real; bounded, rate-polite, 429-hard-stop).
+sbo market booster-arbitrage --online --confirm --max-games 10
+
+# Foil cards cheaper to buy than the gems they yield (net of the ~15% gem-sale fee).
+sbo market card-gem-arbitrage --online --confirm --max-cards 50
+```
+
+Each signal is deliberately conservative: booster-vs-contents and card→gem flag on the
+**net** value you'd actually clear after fees, liquidity is gated on real demand, and
+confidence is capped low because a three-card draw and a moving gem price are genuinely
+uncertain. Prefer the cheapest-badges flow above for a surer plan.
+
 ## Command reference
 
 Run `sbo <command> --help` for the exact flags. Networked commands are always opt-in
