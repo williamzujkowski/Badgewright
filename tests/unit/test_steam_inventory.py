@@ -212,7 +212,10 @@ class TestHoldings:
                 "marketable": 1,
                 "tags": [_tag("item_class", "item_class_6")],
             },
-            {  # loose gems (no market_hash_name; amount = gem count)
+            {  # loose gems: REAL shape (#112) — carries mhn "753-Gems", non-marketable,
+                # amount = gem count. Must classify despite name present + marketable 0.
+                "market_hash_name": "753-Gems",
+                "market_name": "Gems",
                 "type": "Steam Gems",
                 "marketable": 0,
                 "tags": [_tag("item_class", "item_class_7")],
