@@ -6,6 +6,40 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-07
+
+Value your whole inventory — cards **and** non-card goods — and make the booster-arbitrage
+signal actually usable. Still strictly read-only and human-executed.
+
+### Added
+
+- **Non-card inventory holdings** (#97): `sbo inventory import` now retains booster packs,
+  the Sack of Gems, loose gems, and other marketable community items (a new
+  `user_item_holding` table + `ItemKind`), instead of dropping every non-card.
+- **`sbo inventory value` now values gems and goods** (#97): gems are marked to the
+  Sack-of-Gems price via the gem layer; booster packs / sacks / other items at their own
+  cached lowest ask (flagged unpriced, never zeroed). `sbo report inventory-value` gains a
+  `kind` column. Offline, descriptive-only.
+
+### Fixed
+
+- **booster-arbitrage `ARB` flag was unreachable** (#108): resale-demand liquidity needs
+  24h volume, but a sweep only yields asks, so the "confirmed-liquid" flag never fired.
+  `sbo market booster-arbitrage` now enriches each candidate's cards via priceoverview
+  (bounded, rate-polite, 429-hard-stop) so the flag is reachable; a misleading test that
+  injected impossible volume is fixed.
+- **booster-arbitrage set completeness** (#109): a game with fewer discovered cards than
+  its catalog set size is now skipped (its EV would be biased low), matching the sibling
+  modules.
+- **booster-arbitrage skew check** (#110) is now integer math (no float in the
+  Decimal-strict module); documented why its liquidity bar is stricter than cheapest-badges.
+
+### Changed
+
+- `Store.latest_price` gains a currency filter (already shipped in 1.1.0's changed section;
+  now also used by the non-card valuation path so a stray other-currency fetch can't mask a
+  usable price).
+
 ## [1.1.0] - 2026-07-06
 
 Arbitrage & inventory valuation (epic #94): value Steam gems in real money, value your own
