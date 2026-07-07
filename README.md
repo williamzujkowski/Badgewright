@@ -17,7 +17,7 @@ manually, inside Steam. It never touches your account.
 
 This boundary is not just a promise — it is **structurally enforced** in code. Every
 outbound request goes through `steam_badge_optimizer.safety`, which permits only
-side-effect-free HTTP methods (`GET`/`HEAD`/`OPTIONS`) to a small allowlist of read-only
+the side-effect-free `GET` method to a small allowlist of read-only
 Steam hosts, and trips a hard failure on any URL that names a known action route (buy,
 sell, craft, trade, list, cancel). A CI gate parses the source and fails the build if a
 mutating HTTP verb or an egress path outside the guarded client is ever introduced. See

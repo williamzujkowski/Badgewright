@@ -39,8 +39,10 @@ holds.
 
 1. **Choke-point HTTP client.** All network egress goes through the guarded client;
    `steam_badge_optimizer.safety.assert_safe_request` validates every request:
-   - **Method allowlist** — only `GET`/`HEAD`/`OPTIONS`. Mutating verbs are how one
-     buys/sells/crafts/trades; there is deliberately **no** override to relax this.
+   - **Method allowlist** — only `GET` (narrowed from `GET`/`HEAD`/`OPTIONS` in #31: the
+     tool only ever GETs, so the allowlist states exactly what is reachable). Mutating
+     verbs are how one buys/sells/crafts/trades; there is deliberately **no** override to
+     relax this.
    - **Host allowlist** — a small set of read-only Steam/catalog hosts. Adding a
      host is a reviewed change recorded here.
    - **Forbidden-route tripwire** — any URL naming a known action route

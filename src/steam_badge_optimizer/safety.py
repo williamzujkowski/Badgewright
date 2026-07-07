@@ -11,9 +11,9 @@ Every outbound HTTP request the app makes MUST pass through :func:`assert_safe_r
 
 Two independent checks, defense-in-depth:
 
-1. **Method allowlist** — only side-effect-free verbs (GET, HEAD, OPTIONS) are
-   permitted. A POST/PUT/PATCH/DELETE to Steam is exactly how one would buy,
-   craft, or list, so those verbs are refused unconditionally.
+1. **Method allowlist** — only the side-effect-free GET verb is permitted (#31: the
+   tool only GETs, so the allowlist states exactly what is reachable). A
+   POST/PUT/PATCH/DELETE — or even HEAD/OPTIONS — to Steam is refused unconditionally.
 2. **Host allowlist** — requests may only target a small set of read endpoints.
 3. **Forbidden-path tripwire** — even a GET whose URL names a known state-mutating
    Steam action route (buy, sell, craft, trade, ...) is refused, so an accidental
@@ -48,8 +48,12 @@ class SafetyViolationError(RuntimeError):
 
 #: Only side-effect-free HTTP methods are ever permitted. This is the single most
 #: important line in the project — mutating verbs against Steam are how one buys,
-#: sells, crafts, trades, or lists. There is intentionally no override.
-ALLOWED_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
+#: sells, crafts, trades, or lists. There is intentionally no override. Narrowed to
+#: exactly GET (#31): the tool only ever GETs (SafeClient exposes no other verb), so the
+#: allowlist states precisely what's reachable — least privilege, no advertised-but-dead
+#: allowance. HEAD/OPTIONS are safe verbs; re-add them here explicitly if a real need ever
+#: arises (e.g. a content-length probe).
+ALLOWED_METHODS: frozenset[str] = frozenset({"GET"})
 
 #: Read-only Steam (and catalog) hosts the tool is permitted to contact. Kept
 #: deliberately small; adding a host is a reviewed change (see the safety ADR).
@@ -98,7 +102,10 @@ FORBIDDEN_PATH_FRAGMENTS: frozenset[str] = frozenset(
 
 def is_host_allowed(host: str) -> bool:
     """Return True if *host* (or a subdomain of an allowed host) is permitted."""
-    host = host.lower().strip()
+    # Normalize a trailing dot: "steamcommunity.com." is a valid absolute FQDN that
+    # resolves identically, so it must match (#30). rstrip only removes terminal dots, so
+    # an embedded label like "steamcommunity.com.evil.com" is unaffected and still rejected.
+    host = host.lower().strip().rstrip(".")
     if not host:
         return False
     return any(host == allowed or host.endswith("." + allowed) for allowed in ALLOWED_HOSTS)
