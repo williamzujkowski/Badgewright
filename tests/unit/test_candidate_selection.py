@@ -180,3 +180,44 @@ class TestPlanCheapestCliIsOptIn:
         )
         assert result.exit_code == 0
         assert "rate-limited" in result.output.lower()
+
+
+class TestEvidenceGate:
+    def test_prefers_well_evidenced_over_cheaper_singleton(self) -> None:
+        # #81: a 1/6 game with one $0.03 card (lower est) must NOT outrank a 3/8 game with
+        # more priced evidence — the singleton is the Amber-Throne trap.
+        with Store.in_memory() as store:
+            _partial(store, 1, 6, [3])  # 1/6 priced, singleton gamble
+            _partial(store, 2, 8, [30, 30, 30])  # 3/8 priced, well-evidenced
+            out = select_candidate_games(store, max_games=5)
+        # game 1 has the lower est cost, but game 2 clears the evidence gate -> ranks first.
+        assert out[0].appid == 2
+        assert out[1].appid == 1
+        assert out[1].est_completion_cents < out[0].est_completion_cents  # 1 was "cheaper"
+
+    def test_all_singletons_order_unchanged(self) -> None:
+        # Every game a lone-card singleton -> one uniform tier -> pure cheapest-est order.
+        with Store.in_memory() as store:
+            _partial(store, 1, 6, [3])
+            _partial(store, 2, 6, [10])
+            out = select_candidate_games(store, max_games=5)
+        assert [c.appid for c in out] == [1, 2]  # by est cost, as before the gate
+
+    def test_min_fraction_zero_is_pure_cost(self) -> None:
+        # min_priced_fraction=0 -> every candidate clears the gate -> pure est-cost order.
+        with Store.in_memory() as store:
+            _partial(store, 1, 6, [3])
+            _partial(store, 2, 8, [30, 30, 30])
+            out = select_candidate_games(store, max_games=5, min_priced_fraction=0.0)
+        assert out[0].appid == 1  # the cheaper est now wins (gate disabled)
+
+    def test_priced_fraction_populated(self) -> None:
+        with Store.in_memory() as store:
+            _partial(store, 2, 8, [30, 30, 30])
+            out = select_candidate_games(store, max_games=5)
+        assert out[0].priced_fraction == 3 / 8
+
+    @pytest.mark.parametrize("bad", [-0.1, 1.5, 2.0])
+    def test_min_fraction_out_of_range_rejected(self, bad: float) -> None:
+        with Store.in_memory() as store, pytest.raises(ValueError):
+            select_candidate_games(store, min_priced_fraction=bad)
