@@ -111,7 +111,7 @@ def render_inventory_html(
         f"As of {as_of}.</p>",
     ]
     if not rows:
-        body.append("<p>No held cards to value yet.</p>")
+        body.append("<p>No holdings to value yet.</p>")
     else:
         body.append(
             "<table><thead><tr><th>#</th><th>game</th><th>appid</th><th>kind</th><th>item</th>"

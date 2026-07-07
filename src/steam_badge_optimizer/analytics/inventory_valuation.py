@@ -120,7 +120,11 @@ def value_inventory(
                 signals.append("unpriced (no cached Sack-of-Gems price)")
         else:
             latest = store.latest_price(held.appid, held.market_hash_name, currency=currency)
-            if latest is not None and latest.lowest is not None:
+            if (
+                latest is not None
+                and latest.lowest is not None
+                and latest.lowest.currency == currency
+            ):
                 unit = latest.lowest
                 line = Money(unit.cents * held.quantity, currency)
                 total_cents += line.cents

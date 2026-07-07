@@ -294,7 +294,7 @@ def inventory_value(
 
     if not valuation.holdings:
         typer.echo(
-            "No card inventory to value. Import it first:\n"
+            "No inventory to value. Import it first:\n"
             "  sbo inventory import --steamid <you> --online"
         )
         raise typer.Exit(code=1)

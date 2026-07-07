@@ -192,7 +192,7 @@ class TestCli:
 
         res = CliRunner().invoke(app, ["inventory", "value", "--data-dir", str(tmp_path)])
         assert res.exit_code == 1
-        assert "No card inventory" in res.stdout
+        assert "No inventory" in res.stdout
 
     def test_bad_top_rejected(self, tmp_path) -> None:
         from typer.testing import CliRunner
@@ -268,3 +268,41 @@ class TestNonCardHoldings:
             v = value_inventory(store, currency="USD")
         assert v.total_value == Money(40 + 50, "USD")  # card + gems
         assert {h.kind for h in v.holdings} == {"card", "gems"}
+
+    def test_held_sack_valued_at_its_market_price(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _sack(store, 50)  # Sack of Gems market price = 50c
+            _hold_item(store, 753, "753-Sack of Gems", ItemKind.SACK_OF_GEMS, 2)
+            v = value_inventory(store, currency="USD")
+        sack = next(h for h in v.holdings if h.kind == "sack_of_gems")
+        assert sack.line_value == Money(100, "USD") and sack.unit_price == Money(50, "USD")
+
+    def test_booster_priced_in_other_currency_is_unpriced(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _hold_item(store, 440, "440-B Booster Pack", ItemKind.BOOSTER_PACK, 1)
+            _price(store, 440, "440-B Booster Pack", 30, currency="EUR")  # only EUR cached
+            v = value_inventory(store, currency="USD")
+        assert v.unpriced_count == 1 and v.total_value == Money(0, "USD")
+
+    def test_cli_renders_priced_gems_without_unit(self, tmp_path) -> None:
+        from typer.testing import CliRunner
+
+        from steam_badge_optimizer.cli import app
+        from steam_badge_optimizer.config import Settings
+        from steam_badge_optimizer.models import ItemKind
+
+        s = Settings.resolve(data_dir=str(tmp_path))
+        s.data_dir.mkdir(parents=True, exist_ok=True)
+        with Store(s.db_path) as store:
+            _sack(store, 50)
+            _hold_item(store, 753, "753-Gems", ItemKind.GEMS, 2000)
+        res = CliRunner().invoke(app, ["inventory", "value", "--data-dir", str(tmp_path)])
+        assert res.exit_code == 0
+        assert "[gems]" in res.stdout
+        # gems line shows a value (1.00) but no per-unit "@ " price
+        gem_line = next(ln for ln in res.stdout.splitlines() if "[gems]" in ln)
+        assert "1.00" in gem_line and " @ " not in gem_line
