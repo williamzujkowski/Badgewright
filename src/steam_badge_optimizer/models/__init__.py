@@ -5,7 +5,7 @@ provenance. They are the shapes the ingestion, persistence, optimizer, and repor
 layers serialize and round-trip.
 """
 
-from .badge import BadgeSet, Card, UserBadgeProgress
+from .badge import BadgeSet, Card, CardGooValue, UserBadgeProgress
 from .inventory import ItemKind, UserCardInventory, UserItemHolding
 from .market import MarketItem, PriceSnapshot
 from .money import Money, PriceParseError, parse_steam_price
@@ -16,6 +16,7 @@ from .steam import SteamApp
 __all__ = [
     "BadgeSet",
     "Card",
+    "CardGooValue",
     "Confidence",
     "ItemKind",
     "MarketItem",

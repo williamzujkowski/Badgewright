@@ -20,6 +20,7 @@ from types import TracebackType
 from ..models import (
     BadgeSet,
     Card,
+    CardGooValue,
     ItemKind,
     MarketItem,
     Money,
@@ -194,6 +195,46 @@ class Store:
             (inv.appid, inv.market_hash_name, inv.quantity, int(inv.is_foil)),
         )
         self.conn.commit()
+
+    def upsert_goo_value(self, goo: CardGooValue, source: SourceRecord) -> None:
+        source_id = self.record_source(source)
+        self.conn.execute(
+            """
+            INSERT INTO card_goo_value
+                (appid, market_hash_name, item_type, border_color, goo_value, fetched_at, source_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(appid, market_hash_name) DO UPDATE SET
+                item_type = excluded.item_type, border_color = excluded.border_color,
+                goo_value = excluded.goo_value, fetched_at = excluded.fetched_at,
+                source_id = excluded.source_id
+            """,
+            (
+                goo.appid,
+                goo.market_hash_name,
+                goo.item_type,
+                goo.border_color,
+                goo.goo_value,
+                source.fetched_at.isoformat(),
+                source_id,
+            ),
+        )
+        self.conn.commit()
+
+    def goo_value_for(self, appid: int, market_hash_name: str) -> CardGooValue | None:
+        row = self.conn.execute(
+            "SELECT appid, market_hash_name, item_type, border_color, goo_value "
+            "FROM card_goo_value WHERE appid = ? AND market_hash_name = ?",
+            (appid, market_hash_name),
+        ).fetchone()
+        if row is None:
+            return None
+        return CardGooValue(
+            appid=row["appid"],
+            market_hash_name=row["market_hash_name"],
+            item_type=row["item_type"],
+            border_color=row["border_color"],
+            goo_value=row["goo_value"],
+        )
 
     def upsert_item_holding(self, holding: UserItemHolding) -> None:
         self.conn.execute(
