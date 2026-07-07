@@ -40,6 +40,8 @@ CARDS_PER_BOOSTER = 3
 #: Minimum depth to treat a pack as buyable (its asks) or a card as resellable (its 24h
 #: volume / demand). Deliberately above a token 1-2: a "liquid" resale needs real demand,
 #: not two stale listings, or dumping three cards just craters the floor we valued against.
+#: This bar is STRICTER than cheapest_badges.MIN_LISTINGS (2): there the signal is
+#: *buyability* (asks-or-volume), here it is *resale demand* (volume only), which is scarcer.
 MIN_LISTINGS = 5
 #: When the priciest card is this many times the set mean, value is concentrated in one
 #: card: EV is positive but the median single-pack outcome is a loss. Flag it.
@@ -105,6 +107,9 @@ def scan_booster_arbitrage(
     """
     if min_listings < 1:
         raise ValueError("min_listings must be >= 1")
+    # The catalog set size is the floor for a full set; a partial discovery would bias the
+    # EV low over a cheap subset (like the sibling modules, we require completeness).
+    set_sizes = {bs.appid: bs.set_size for bs in store.list_badge_sets()}
     out: list[BoosterArbitrage] = []
     for appid, quote in quotes.items():
         if quote.currency != currency:
@@ -112,6 +117,9 @@ def scan_booster_arbitrage(
         cards = store.cards_for_app(appid, include_foil=False)
         if not cards:
             continue
+        expected = set_sizes.get(appid)
+        if expected and len(cards) < expected:
+            continue  # incomplete set — EV would be biased low; skip rather than mislead
 
         card_lowest: list[int] = []
         card_liquidity: list[tuple[int | None, int | None]] = []  # (asks, volume)
@@ -146,8 +154,10 @@ def scan_booster_arbitrage(
             signals.append(f"thin booster: {quote.listings} listing(s) (< {min_listings})")
         if not cards_liquid:
             signals.append(f"resale demand unconfirmed: a card has < {min_listings} 24h sales")
-        mean_card = sum(card_lowest) / len(card_lowest)
-        if mean_card > 0 and max(card_lowest) / mean_card >= SKEW_FLAG:
+        # Skew: is one card worth >= SKEW_FLAG x the set mean? Compared as integers
+        # (max*n >= SKEW_FLAG*total) to avoid a float mean in this Decimal-strict module.
+        total_lowest = sum(card_lowest)
+        if total_lowest > 0 and max(card_lowest) * len(card_lowest) >= SKEW_FLAG * total_lowest:
             signals.append("value concentrated in one card — the median pack is likely a loss")
 
         # Never above LOW: even a liquid, profitable-in-expectation flag is an optimistic
