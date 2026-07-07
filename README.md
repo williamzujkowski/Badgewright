@@ -101,6 +101,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo market plan-cheapest --online --confirm` | Complete the cheapest candidate games, then rank. |
 | `sbo market gems [--set-size N] [--online --confirm]` | Value gems in real money (Sack of Gems) + booster gem cost; reads cached price, `--online --confirm` refreshes. |
 | `sbo market booster-arbitrage --online --confirm` | Flag Booster Packs cheaper than their card contents (research; modeled EV). |
+| `sbo market card-gem-arbitrage [--online --confirm]` | Flag cards cheaper than the gems they yield (research; foils). |
 | `sbo market scan-sets / scan-weakness / anomalies` | Market-intelligence research (never advice). |
 | `sbo optimize [--budget B] [--badge-level L]` | Cheapest plan to a target level/budget (greedy). |
 | `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |

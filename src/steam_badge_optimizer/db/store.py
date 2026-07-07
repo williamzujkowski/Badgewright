@@ -362,6 +362,25 @@ class Store:
         ).fetchall()
         return [MarketItem(appid=r["appid"], market_hash_name=r["market_hash_name"]) for r in rows]
 
+    def list_cards(self, *, foil_only: bool = False) -> list[Card]:
+        """All known cards across all apps (optionally only foils)."""
+        query = "SELECT * FROM card"
+        if foil_only:
+            query += " WHERE is_foil = 1"
+        query += " ORDER BY appid, market_hash_name"
+        rows = self.conn.execute(query).fetchall()
+        return [
+            Card(
+                appid=r["appid"],
+                market_hash_name=r["market_hash_name"],
+                card_name=r["card_name"],
+                is_foil=bool(r["is_foil"]),
+                marketable=bool(r["marketable"]),
+                tradable=bool(r["tradable"]),
+            )
+            for r in rows
+        ]
+
     def list_inventory(self) -> list[UserCardInventory]:
         """Every held inventory row across all apps (for whole-portfolio valuation)."""
         rows = self.conn.execute(
