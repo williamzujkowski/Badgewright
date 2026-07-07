@@ -13,6 +13,8 @@ from pathlib import Path
 
 from platformdirs import user_data_dir
 
+from . import __version__
+
 APP_NAME = "steam-badge-optimizer"
 
 # --- Well-known Steam constants (see docs/data-sources.md) -------------------
@@ -56,8 +58,9 @@ def account_xp_between(current_level: int, target_level: int) -> int:
 #: priceoverview currency ids (subset; extend as needed).
 CURRENCY_IDS: dict[str, int] = {"USD": 1, "GBP": 2, "EUR": 3, "CHF": 4, "RUB": 5}
 
-#: Honest, contactable User-Agent. We do not impersonate a browser.
-USER_AGENT = "Badgewright/1.3.1 (+https://github.com/williamzujkowski/Badgewright)"
+#: Honest, contactable User-Agent. We do not impersonate a browser. Version is derived
+#: from the package metadata (#40), so it never drifts from pyproject.toml.
+USER_AGENT = f"Badgewright/{__version__} (+https://github.com/williamzujkowski/Badgewright)"
 
 
 @dataclass(slots=True)
