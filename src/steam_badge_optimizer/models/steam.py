@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from ._types import NonBlankStr
+
 __all__ = ["SteamApp"]
 
 
@@ -13,7 +15,7 @@ class SteamApp(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0, description="Steam application id (positive).")
-    name: str = Field(min_length=1, description="Display name of the app.")
+    name: NonBlankStr = Field(min_length=1, description="Display name of the app.")
 
     def market_url(self) -> str:
         """The Community Market search URL scoped to this app (read-only link)."""

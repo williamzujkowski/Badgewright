@@ -12,6 +12,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from ._types import NonBlankStr
 from .money import Money
 
 __all__ = ["Confidence", "PurchaseCandidate"]
@@ -31,7 +32,7 @@ class PurchaseCandidate(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1)
+    market_hash_name: NonBlankStr = Field(min_length=1)
     missing_quantity: int = Field(gt=0, description="Copies still needed to buy.")
     estimated_unit_price: Money | None = Field(
         default=None, description="Single-unit (lowest) ask; None if price is unavailable."

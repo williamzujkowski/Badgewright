@@ -6,6 +6,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from ._types import NonBlankStr
+
 __all__ = ["ItemKind", "UserCardInventory", "UserItemHolding"]
 
 
@@ -20,7 +22,7 @@ class UserCardInventory(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1)
+    market_hash_name: NonBlankStr = Field(min_length=1)
     quantity: int = Field(ge=0, description="Copies owned (non-negative).")
     is_foil: bool = False
 
@@ -49,6 +51,6 @@ class UserItemHolding(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1)
+    market_hash_name: NonBlankStr = Field(min_length=1)
     kind: ItemKind
     quantity: int = Field(ge=0, description="Copies held, or gem count for GEMS.")
