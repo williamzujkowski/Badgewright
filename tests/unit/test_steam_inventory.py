@@ -20,10 +20,14 @@ STEAMID = 76561197960287930
 class TestParse:
     def test_fixture_counts_and_dedup(self) -> None:
         result = inv.parse_inventory_json(FIXTURE.read_bytes())
-        # Heavy (x3, normal) + Pyro (x1, foil); background ignored; orphan asset skipped.
+        # Heavy (x3, normal) + Pyro (x1, foil); the marketable background is now retained
+        # as an OTHER holding (not dropped); orphan asset skipped.
         assert len(result.cards) == 2
         assert result.skipped == 1
         assert result.total_assets == 5
+        assert len(result.holdings) == 1  # the profile background, retained as OTHER
+        assert result.holdings[0].market_hash_name == "440-Background"
+        assert result.holdings[0].kind.value == "other"
         by_name = {c.inventory.market_hash_name: c for c in result.cards}
         assert by_name["440-Heavy"].inventory.quantity == 3  # summed across assets
         assert by_name["440-Heavy"].inventory.is_foil is False
