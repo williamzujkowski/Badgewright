@@ -11,9 +11,9 @@ Every outbound HTTP request the app makes MUST pass through :func:`assert_safe_r
 
 Two independent checks, defense-in-depth:
 
-1. **Method allowlist** — only side-effect-free verbs (GET, HEAD, OPTIONS) are
-   permitted. A POST/PUT/PATCH/DELETE to Steam is exactly how one would buy,
-   craft, or list, so those verbs are refused unconditionally.
+1. **Method allowlist** — only the side-effect-free GET verb is permitted (#31: the
+   tool only GETs, so the allowlist states exactly what is reachable). A
+   POST/PUT/PATCH/DELETE — or even HEAD/OPTIONS — to Steam is refused unconditionally.
 2. **Host allowlist** — requests may only target a small set of read endpoints.
 3. **Forbidden-path tripwire** — even a GET whose URL names a known state-mutating
    Steam action route (buy, sell, craft, trade, ...) is refused, so an accidental
