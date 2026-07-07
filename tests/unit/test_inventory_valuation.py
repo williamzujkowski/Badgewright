@@ -203,3 +203,68 @@ class TestCli:
             app, ["inventory", "value", "--top", "0", "--data-dir", str(tmp_path)]
         )
         assert res.exit_code == 2
+
+
+def _hold_item(store: Store, appid: int, name: str, kind, qty: int) -> None:
+    from steam_badge_optimizer.models import UserItemHolding
+
+    store.upsert_item_holding(
+        UserItemHolding(appid=appid, market_hash_name=name, kind=kind, quantity=qty)
+    )
+
+
+def _sack(store: Store, cents: int) -> None:
+    _price(store, 753, "753-Sack of Gems", cents)  # 1000 gems
+
+
+class TestNonCardHoldings:
+    def test_values_gems_via_sack_price(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _sack(store, 50)  # 1000 gems = $0.50 -> $0.00005/gem
+            _hold_item(store, 753, "753-Gems", ItemKind.GEMS, 2000)
+            v = value_inventory(store, currency="USD")
+        gems = next(h for h in v.holdings if h.kind == "gems")
+        assert gems.line_value == Money(100, "USD")  # 2000 * 0.05c
+        assert gems.unit_price is None  # per-gem is sub-cent
+        assert v.total_value == Money(100, "USD") and v.priced_count == 1
+
+    def test_gems_unpriced_without_sack(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _hold_item(store, 753, "753-Gems", ItemKind.GEMS, 1000)
+            v = value_inventory(store, currency="USD")
+        assert v.unpriced_count == 1 and v.total_value == Money(0, "USD")
+        assert any("Sack-of-Gems" in s for h in v.holdings for s in h.signals)
+
+    def test_values_booster_at_market(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _hold_item(store, 440, "440-TF2 Booster Pack", ItemKind.BOOSTER_PACK, 2)
+            _price(store, 440, "440-TF2 Booster Pack", 30)
+            v = value_inventory(store, currency="USD")
+        b = next(h for h in v.holdings if h.kind == "booster_pack")
+        assert b.line_value == Money(60, "USD") and b.unit_price == Money(30, "USD")
+
+    def test_booster_unpriced_when_no_price(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _hold_item(store, 440, "440-X Booster Pack", ItemKind.BOOSTER_PACK, 1)
+            v = value_inventory(store, currency="USD")
+        assert v.unpriced_count == 1 and v.total_value == Money(0, "USD")
+
+    def test_cards_and_holdings_combined_total(self, tmp_path) -> None:
+        from steam_badge_optimizer.models import ItemKind
+
+        with Store(tmp_path / "t.sqlite3") as store:
+            _hold(store, 220, "220-A", 1)
+            _price(store, 220, "220-A", 40)
+            _sack(store, 50)
+            _hold_item(store, 753, "753-Gems", ItemKind.GEMS, 1000)
+            v = value_inventory(store, currency="USD")
+        assert v.total_value == Money(40 + 50, "USD")  # card + gems
+        assert {h.kind for h in v.holdings} == {"card", "gems"}

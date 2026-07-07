@@ -18,7 +18,9 @@ from steam_badge_optimizer.reports.inventory_report import (
 NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
 
 
-def _holding(appid: int, name: str, qty: int, cents: int | None, *, foil: bool = False, sig=None):
+def _holding(
+    appid: int, name: str, qty: int, cents: int | None, *, foil: bool = False, sig=None, kind="card"
+):
     unit = Money(cents, "USD") if cents is not None else None
     line = Money(cents * qty, "USD") if cents is not None else None
     return HoldingValue(
@@ -28,6 +30,7 @@ def _holding(appid: int, name: str, qty: int, cents: int | None, *, foil: bool =
         is_foil=foil,
         unit_price=unit,
         line_value=line,
+        kind=kind,
         signals=sig or [],
     )
 
@@ -62,6 +65,18 @@ class TestBuildRows:
         assert r.unit_price == "" and r.line_value == ""
         assert r.foil == "yes" and r.game == "App 1"
         assert "unpriced" in r.notes
+
+
+class TestKindColumn:
+    def test_kind_in_csv_and_html(self, tmp_path) -> None:
+        v = _valuation(
+            [_holding(753, "753-Gems", 1000, 5, kind="gems")], total=5, priced=1, unpriced=0
+        )
+        rows = build_inventory_rows(v, {}, now=NOW)
+        assert rows[0].kind == "gems"
+        doc = render_inventory_html(v, rows, currency="USD")
+        assert "gems" in doc and "<th>kind</th>" in doc
+        assert_inert_html(doc)
 
 
 class TestCsvExport:

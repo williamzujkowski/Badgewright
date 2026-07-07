@@ -35,6 +35,7 @@ class InventoryValueRow:
     rank: int
     game: str
     appid: int
+    kind: str  # "card" or booster_pack / gems / sack_of_gems / other
     card: str  # market_hash_name
     quantity: int
     foil: str  # "yes" / ""
@@ -59,6 +60,7 @@ def build_inventory_rows(
                 rank=i,
                 game=names.get(h.appid, f"App {h.appid}"),
                 appid=h.appid,
+                kind=h.kind,
                 card=h.market_hash_name,
                 quantity=h.quantity,
                 foil="yes" if h.is_foil else "",
@@ -112,7 +114,7 @@ def render_inventory_html(
         body.append("<p>No held cards to value yet.</p>")
     else:
         body.append(
-            "<table><thead><tr><th>#</th><th>game</th><th>appid</th><th>card</th>"
+            "<table><thead><tr><th>#</th><th>game</th><th>appid</th><th>kind</th><th>item</th>"
             "<th>qty</th><th>foil</th>"
             f"<th>unit ({e(currency)})</th><th>value ({e(currency)})</th>"
             "<th>notes</th></tr></thead><tbody>"
@@ -121,7 +123,7 @@ def render_inventory_html(
             cls = ' class="unpriced"' if not r.line_value else ""
             body.append(
                 f"<tr{cls}><td>{r.rank}</td><td>{e(r.game)}</td><td>{r.appid}</td>"
-                f"<td>{e(r.card)}</td><td>{r.quantity}</td><td>{e(r.foil)}</td>"
+                f"<td>{e(r.kind)}</td><td>{e(r.card)}</td><td>{r.quantity}</td><td>{e(r.foil)}</td>"
                 f"<td>{e(r.unit_price)}</td><td>{e(r.line_value)}</td>"
                 f"<td>{e(r.notes)}</td></tr>"
             )

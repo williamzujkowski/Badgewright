@@ -272,11 +272,12 @@ def inventory_value(
     top: int = typer.Option(20, help="How many holdings to list (totals cover everything)."),
     data_dir: str | None = typer.Option(None, help="Override the local data directory."),
 ) -> None:
-    """Value your held cards at the current market (research only; buy/sell manually).
+    """Value your held cards + gems/boosters/other at the current market (research only).
 
-    Offline: uses cached prices. Seed them first with `sbo prices refresh --online`.
-    Values each holding at its latest lowest ask; unpriced holdings are flagged, and the
-    total is a floor over the priced ones.
+    Offline: uses cached prices. Seed them first with `sbo prices refresh --online` (and
+    `sbo market gems --online --confirm` for the gem price). Values each holding at its
+    latest lowest ask (gems marked to the Sack-of-Gems price); unpriced holdings are
+    flagged, and the total is a floor over the priced ones.
     """
     if top < 1:
         typer.secho("--top must be >= 1.", fg=typer.colors.RED)
@@ -308,15 +309,16 @@ def inventory_value(
         + ("  — seed prices with `sbo prices refresh --online`" if valuation.unpriced_count else "")
     )
     for h in valuation.holdings:
-        game = names.get(h.appid, f"App {h.appid}")
+        label = names.get(h.appid, f"App {h.appid}") if h.kind == "card" else h.market_hash_name
         foil = " (foil)" if h.is_foil else ""
-        if h.line_value is not None and h.unit_price is not None:
-            typer.echo(
-                f"  {h.line_value.amount:>8.2f}  {h.quantity:>3}x @ {h.unit_price.amount:.2f}  "
-                f"{game}{foil}"
-            )
+        tag = "" if h.kind == "card" else f" [{h.kind}]"
+        if h.line_value is not None:
+            at = f" @ {h.unit_price.amount:.2f}" if h.unit_price is not None else ""
+            typer.echo(f"  {h.line_value.amount:>8.2f}  {h.quantity:>5}x{at}  {label}{foil}{tag}")
         else:
-            typer.echo(f"  {'—':>8}  {h.quantity:>3}x  {game}{foil}  [{'; '.join(h.signals)}]")
+            typer.echo(
+                f"  {'—':>8}  {h.quantity:>5}x  {label}{foil}{tag}  [{'; '.join(h.signals)}]"
+            )
     typer.secho(
         "\nResearch only. Values are current market floors; sell/hold decisions are yours.",
         dim=True,

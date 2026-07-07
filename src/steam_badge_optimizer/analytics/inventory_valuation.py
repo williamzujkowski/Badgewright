@@ -10,10 +10,10 @@ replace), matching the cost basis used elsewhere. A holding whose price isn't ca
 the requested currency is reported as *unpriced* (never valued at zero), so the total is
 always a floor over the priced subset and the unpriced count is visible.
 
-Gem-yield comparison for cards (card -> gems vs card market value) is intentionally NOT
-here: it depends on the card "goo" value endpoint whose read-only accessibility is still
-an open spike (#100). Held gems / booster packs are valued in a follow-up (#97b) once the
-inventory importer retains them.
+Non-card holdings (increment 2b-ii, #97) are valued too: **gems** are marked to the
+Sack-of-Gems price via the gem layer (``quantity`` gems x per-gem), and booster packs /
+sacks / other marketable items at their own cached lowest ask. Card->gem *yield*
+comparison is still separate (open until #101 lands the goo-value reader).
 """
 
 from __future__ import annotations
@@ -21,7 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ..models import Money
+from ..models import ItemKind, Money
+from .gem_economy import gem_value, gems_to_money, latest_sack_price
 
 if TYPE_CHECKING:
     from ..db import Store
@@ -37,6 +38,7 @@ class HoldingValue:
     is_foil: bool
     unit_price: Money | None  # latest lowest ask in the requested currency, else None
     line_value: Money | None  # unit_price * quantity, else None (unpriced)
+    kind: str = "card"  # "card" or an ItemKind value (booster_pack, gems, sack_of_gems, other)
     signals: list[str] = field(default_factory=list)
 
     @property
@@ -94,6 +96,47 @@ def value_inventory(
                 is_foil=inv.is_foil,
                 unit_price=unit,
                 line_value=line,
+                signals=signals,
+            )
+        )
+
+    # Non-card holdings: gems are marked to the Sack-of-Gems price; everything else
+    # (booster packs, sacks, backgrounds/emoticons) at its own cached lowest ask.
+    sack = latest_sack_price(store, currency=currency)
+    per_gem = gem_value(sack.lowest) if sack is not None and sack.lowest is not None else None
+    for held in store.list_item_holdings():
+        if held.quantity <= 0:
+            continue
+        unit = None
+        line = None
+        signals = []
+        if held.kind is ItemKind.GEMS:
+            if per_gem is not None:
+                line = gems_to_money(held.quantity, per_gem)  # mark-to-market via the Sack
+                total_cents += line.cents
+                priced_count += 1
+            else:
+                unpriced_count += 1
+                signals.append("unpriced (no cached Sack-of-Gems price)")
+        else:
+            latest = store.latest_price(held.appid, held.market_hash_name, currency=currency)
+            if latest is not None and latest.lowest is not None:
+                unit = latest.lowest
+                line = Money(unit.cents * held.quantity, currency)
+                total_cents += line.cents
+                priced_count += 1
+            else:
+                unpriced_count += 1
+                signals.append(f"unpriced (no cached {currency} market price)")
+        holdings.append(
+            HoldingValue(
+                appid=held.appid,
+                market_hash_name=held.market_hash_name,
+                quantity=held.quantity,
+                is_foil=False,
+                unit_price=unit,
+                line_value=line,
+                kind=str(held.kind),
                 signals=signals,
             )
         )
