@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-07
+
+Card→gem arbitrage: flag foil cards that are cheaper to buy than the gems they yield.
+Strictly read-only and human-executed.
+
+### Added
+
+- **`sbo market card-gem-arbitrage`** (#118): for a card with a cached goo (gem) value, its
+  market lowest ask, and a cached Sack-of-Gems price, compares the card's cost to the gems
+  it would yield and flags the ones that are cheaper. Foil-first (normals yield sub-cent
+  gems); flags on the **net** realizable gem value (after the ~15% sale fee, matching
+  booster-arbitrage) so it never labels a fee-losing trade a profit; confidence capped at
+  LOW. Offline scans cached data; `--online --confirm` refreshes the Sack price + fetches
+  goo values for foil cards that have a cached price (bounded, rate-polite, 429-hard-stop).
+- **Read-only goo-value source + cache** (#116): a card's "goo" value is read via two
+  anonymous GETs — scrape `item_type` from the card's public market-listing render JSON,
+  then the `ajaxgetgoovalueforitemtype` endpoint (both pass the safety boundary; no auth).
+  Cached in a new `card_goo_value` table (migration v4); re-runs skip cached cards unless
+  forced. Card names are fully path-encoded and a name tripping the safety boundary skips
+  the card rather than crashing.
+
 ## [1.2.0] - 2026-07-07
 
 Value your whole inventory — cards **and** non-card goods — and make the booster-arbitrage
