@@ -113,6 +113,20 @@ MIGRATIONS: list[list[str]] = [
     [
         "ALTER TABLE price_snapshot ADD COLUMN listings INTEGER",
     ],
+    # --- v3: non-card community holdings (booster packs, gems, sacks, other). ------
+    # Kept in a separate table so the card inventory stays card-shaped; `kind` records
+    # the item type. Current-state rows keyed by logical identity (like the card table).
+    [
+        """
+        CREATE TABLE user_item_holding (
+            appid            INTEGER NOT NULL,
+            market_hash_name TEXT NOT NULL,
+            kind             TEXT NOT NULL,
+            quantity         INTEGER NOT NULL,
+            PRIMARY KEY (appid, market_hash_name)
+        )
+        """,
+    ],
 ]
 
 

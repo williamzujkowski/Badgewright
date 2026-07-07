@@ -20,6 +20,7 @@ from types import TracebackType
 from ..models import (
     BadgeSet,
     Card,
+    ItemKind,
     MarketItem,
     Money,
     PriceSnapshot,
@@ -28,6 +29,7 @@ from ..models import (
     SteamApp,
     UserBadgeProgress,
     UserCardInventory,
+    UserItemHolding,
 )
 from .schema import apply_migrations
 
@@ -193,6 +195,18 @@ class Store:
         )
         self.conn.commit()
 
+    def upsert_item_holding(self, holding: UserItemHolding) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO user_item_holding (appid, market_hash_name, kind, quantity)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(appid, market_hash_name) DO UPDATE SET
+                kind = excluded.kind, quantity = excluded.quantity
+            """,
+            (holding.appid, holding.market_hash_name, holding.kind.value, holding.quantity),
+        )
+        self.conn.commit()
+
     def upsert_badge_progress(self, progress: UserBadgeProgress) -> None:
         self.conn.execute(
             """
@@ -319,6 +333,22 @@ class Store:
                 market_hash_name=r["market_hash_name"],
                 quantity=r["quantity"],
                 is_foil=bool(r["is_foil"]),
+            )
+            for r in rows
+        ]
+
+    def list_item_holdings(self) -> list[UserItemHolding]:
+        """Every held non-card community item (booster packs, gems, sacks, other)."""
+        rows = self.conn.execute(
+            "SELECT appid, market_hash_name, kind, quantity FROM user_item_holding "
+            "ORDER BY appid, market_hash_name"
+        ).fetchall()
+        return [
+            UserItemHolding(
+                appid=r["appid"],
+                market_hash_name=r["market_hash_name"],
+                kind=ItemKind(r["kind"]),
+                quantity=r["quantity"],
             )
             for r in rows
         ]
