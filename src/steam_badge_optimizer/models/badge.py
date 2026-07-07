@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 from ..config import MAX_NORMAL_BADGE_LEVEL
+from ._types import NonBlankStr
 
 __all__ = ["BadgeSet", "Card", "CardGooValue", "UserBadgeProgress"]
 
@@ -28,7 +29,7 @@ class Card(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1, description="Exact Steam market hash name.")
+    market_hash_name: NonBlankStr = Field(min_length=1, description="Exact Steam market hash name.")
     card_name: str | None = Field(default=None, description="Human card title, if known.")
     is_foil: bool = False
     marketable: bool = True
@@ -46,7 +47,7 @@ class CardGooValue(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1)
+    market_hash_name: NonBlankStr = Field(min_length=1)
     item_type: int = Field(ge=0)
     border_color: int = Field(ge=0)
     goo_value: int = Field(ge=0, description="Gems yielded by turning this card into gems.")

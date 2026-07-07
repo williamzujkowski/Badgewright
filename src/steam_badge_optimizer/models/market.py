@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
+from ._types import NonBlankStr
 from .money import Money
 from .provenance import SourceRecord
 
@@ -18,7 +19,7 @@ class MarketItem(BaseModel):
     model_config = {"frozen": True}
 
     appid: int = Field(gt=0)
-    market_hash_name: str = Field(min_length=1)
+    market_hash_name: NonBlankStr = Field(min_length=1)
 
     def listings_url(self) -> str:
         """Read-only Community Market listings page for manual review."""
