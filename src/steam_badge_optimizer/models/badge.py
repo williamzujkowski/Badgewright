@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..config import MAX_NORMAL_BADGE_LEVEL
 
-__all__ = ["BadgeSet", "Card", "UserBadgeProgress"]
+__all__ = ["BadgeSet", "Card", "CardGooValue", "UserBadgeProgress"]
 
 
 class BadgeSet(BaseModel):
@@ -33,6 +33,23 @@ class Card(BaseModel):
     is_foil: bool = False
     marketable: bool = True
     tradable: bool = True
+
+
+class CardGooValue(BaseModel):
+    """How many gems a card yields when turned into gems ("goo value").
+
+    ``goo_value`` is the gem count; ``item_type``/``border_color`` are the internal Steam
+    parameters it was derived from (border_color 1 = foil, ~10x a normal card). Stable per
+    card — cached so a re-run doesn't re-fetch.
+    """
+
+    model_config = {"frozen": True}
+
+    appid: int = Field(gt=0)
+    market_hash_name: str = Field(min_length=1)
+    item_type: int = Field(ge=0)
+    border_color: int = Field(ge=0)
+    goo_value: int = Field(ge=0, description="Gems yielded by turning this card into gems.")
 
 
 class UserBadgeProgress(BaseModel):

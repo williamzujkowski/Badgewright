@@ -127,6 +127,21 @@ MIGRATIONS: list[list[str]] = [
         )
         """,
     ],
+    # --- v4: cached card "goo" (gem) values. Stable per card, so cache to avoid re-fetch. --
+    [
+        """
+        CREATE TABLE card_goo_value (
+            appid            INTEGER NOT NULL,
+            market_hash_name TEXT NOT NULL,
+            item_type        INTEGER NOT NULL,
+            border_color     INTEGER NOT NULL,
+            goo_value        INTEGER NOT NULL,
+            fetched_at       TEXT NOT NULL,
+            source_id        INTEGER REFERENCES source_record(id),
+            PRIMARY KEY (appid, market_hash_name)
+        )
+        """,
+    ],
 ]
 
 
