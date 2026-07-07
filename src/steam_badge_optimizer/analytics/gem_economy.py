@@ -17,7 +17,10 @@ The per-gem value comes in two flavors: a **gross** figure (what a gem costs to 
 i.e. the Sack's lowest ask / 1000) and a **net-of-fee** figure (what a gem you hold is
 worth if you sell it back). Steam's ~15% fee is levied on the *seller's* proceeds and
 added on top to make the buyer's list price, so a seller nets ``list / (1 + fee)``. Costing
-a purchase always uses gross; the net figure is only for valuing gems you already own.
+a purchase uses gross; the net figure estimates resale proceeds after fee. Inventory
+valuation marks a held gem stash to market at **gross** (the card path likewise values at
+the lowest ask, not net), so the two bases stay consistent — use net only when the question
+is explicitly "what would I clear by selling?".
 """
 
 from __future__ import annotations
