@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-07
+
+### Added
+
+- **`sbo optimize --auto-fetch [--max-games N]`** (#69): one command now closes the
+  "cheapest way to level *my* account" loop. It discovers + prices the games you're
+  actually involved with — you own ≥1 card, or have partial (1–4) badge progress — then
+  re-plans, instead of reporting "N badges need discovery/pricing" and leaving you to run
+  `cards discover` + `prices refresh` per game. Bounded to your relevant games (not the
+  ~15k-game catalog), most-owned-first, capped by `--max-games`, rate-polite,
+  429-hard-stop, skip-on-error. Opt-in — offline stays the default.
+
 ## [1.3.2] - 2026-07-07
 
 Hardening & maintenance. No new features.
