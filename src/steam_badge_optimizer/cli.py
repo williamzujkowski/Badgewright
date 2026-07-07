@@ -1242,5 +1242,98 @@ def market_booster_arbitrage(
     )
 
 
+@market_app.command("card-gem-arbitrage")
+def market_card_gem_arbitrage(
+    online: bool = typer.Option(False, help="Allow network access (with --confirm)."),
+    confirm: bool = typer.Option(
+        False, "--confirm", help="Acknowledge this fetches goo values from Steam."
+    ),
+    max_cards: int = typer.Option(50, help="Max cards to fetch goo values for (bounded)."),
+    include_normal: bool = typer.Option(
+        False, "--include-normal", help="Also scan normal cards (gem yield is tiny)."
+    ),
+    top: int = typer.Option(20, help="How many results to show."),
+    data_dir: str | None = typer.Option(None, help="Override the local data directory."),
+) -> None:
+    """Flag cards cheaper to buy than the gems they yield (research only; never crafts).
+
+    Offline: scans cached goo values + prices. With --online --confirm it first refreshes
+    the Sack-of-Gems price and fetches goo values for foil cards that have a cached price
+    (bounded by --max-cards, rate-polite, 429-hard-stop), then scans. Almost always a foil
+    phenomenon — normal cards yield too few gems to beat their market ask.
+    """
+    if max_cards < 1 or top < 1:
+        typer.secho("--max-cards and --top must be >= 1.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    if online and not confirm:
+        typer.secho("Fetching goo values needs --confirm too.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=2)
+
+    from .analytics import scan_card_gem_arbitrage
+    from .analytics.gem_economy import refresh_sack_price
+    from .db import Store
+    from .sources.goo_value import refresh_goo_values
+    from .sources.http_client import RateLimited, SafeClient
+
+    settings = Settings.resolve(data_dir=data_dir, currency=None)
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    foil_only = not include_normal
+    with Store(settings.db_path) as store:
+        if online and confirm:
+            interval = max(settings.min_request_interval_s, SWEEP_MIN_INTERVAL_S)
+            candidates = [
+                c
+                for c in store.list_cards(foil_only=foil_only)
+                if store.latest_price(c.appid, c.market_hash_name, currency=settings.currency)
+                is not None
+                and store.goo_value_for(c.appid, c.market_hash_name) is None
+            ]
+            n = min(len(candidates), max_cards)
+            typer.echo(
+                f"Refreshing the gem price + goo values for up to {n} "
+                f"card(s) at ~1 req/{interval:.0f}s."
+            )
+            try:
+                with SafeClient(min_interval_s=interval) as client:
+                    refresh_sack_price(store, client, currency=settings.currency)
+                    result = refresh_goo_values(
+                        store, client, candidates, currency=settings.currency, max_cards=max_cards
+                    )
+                typer.echo(
+                    f"Goo: {result.fetched} fetched, {result.skipped_cached} cached, "
+                    f"{result.failed} failed."
+                )
+            except RateLimited:
+                typer.secho("Steam rate-limited us; scanning what we have.", fg=typer.colors.YELLOW)
+        names = {a.appid: a.name for a in store.list_apps()}
+        results = scan_card_gem_arbitrage(
+            store, currency=settings.currency, foil_only=foil_only, top=top
+        )
+
+    if not results:
+        typer.echo(
+            "Nothing to rank yet. Need a cached Sack-of-Gems price and cards with cached goo "
+            "values + prices. Seed with:\n"
+            "  sbo market gems --online --confirm\n"
+            "  sbo market card-gem-arbitrage --online --confirm"
+        )
+        raise typer.Exit(code=1)
+    typer.secho(f"\nCard→gem value ({settings.currency}) — modeled, NOT trading advice:", bold=True)
+    for r in results:
+        name = names.get(r.appid, f"App {r.appid}")
+        foil = " (foil)" if r.is_foil else ""
+        flag = "ARB" if r.profitable else "   "
+        typer.echo(
+            f"  margin {r.margin_cents / 100:>+7.2f}  card {r.card_cost.amount:.2f} vs "
+            f"gems≈{r.gem_value.amount:.2f} ({r.goo_value}g)  {name}{foil} "
+            f"[{r.confidence.value}] {flag}"
+        )
+    typer.secho(
+        "\nResearch only. gems≈ is the NET realizable value (after the ~15% gem-sale fee); "
+        "gem prices move, so treat it as speculative. Act manually in Steam.",
+        dim=True,
+    )
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

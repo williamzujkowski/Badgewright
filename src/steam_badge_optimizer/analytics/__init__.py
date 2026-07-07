@@ -3,6 +3,7 @@
 from .anomalies import Anomaly, AnomalyKind, detect_anomalies
 from .booster_arbitrage import BoosterArbitrage, evaluate_booster, scan_booster_arbitrage
 from .candidate_selection import CandidateGame, select_candidate_games
+from .card_gem_arbitrage import CardGemArbitrage, scan_card_gem_arbitrage
 from .cheapest_badges import BadgeSetCost, rank_cheapest_badges
 from .gem_economy import (
     GemValue,
@@ -22,6 +23,7 @@ __all__ = [
     "BadgeSetCost",
     "BoosterArbitrage",
     "CandidateGame",
+    "CardGemArbitrage",
     "CardWeakness",
     "GemValue",
     "HoldingValue",
@@ -37,6 +39,7 @@ __all__ = [
     "refresh_sack_price",
     "sack_of_gems_item",
     "scan_booster_arbitrage",
+    "scan_card_gem_arbitrage",
     "scan_sets",
     "scan_weakness",
     "select_candidate_games",
