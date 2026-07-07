@@ -17,19 +17,22 @@ from steam_badge_optimizer.safety import (
 
 
 class TestMethodAllowlist:
-    @pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS", "get", "Head"])
-    def test_read_methods_allowed(self, method: str) -> None:
+    @pytest.mark.parametrize("method", ["GET", "get", "GeT"])
+    def test_read_method_allowed(self, method: str) -> None:
         # Should not raise.
         assert_safe_request(method, "https://steamcommunity.com/market/priceoverview/")
 
-    @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE", "post"])
-    def test_mutating_methods_refused(self, method: str) -> None:
+    @pytest.mark.parametrize(
+        "method", ["POST", "PUT", "PATCH", "DELETE", "post", "HEAD", "OPTIONS"]
+    )
+    def test_non_get_methods_refused(self, method: str) -> None:
+        # #31: narrowed to GET only — even the safe HEAD/OPTIONS are now refused
+        # (SafeClient never issues them), so the allowlist matches what's reachable.
         with pytest.raises(SafetyViolationError):
             assert_safe_request(method, "https://steamcommunity.com/market/priceoverview/")
 
-    def test_allowlist_contains_only_safe_verbs(self) -> None:
-        assert {"GET", "HEAD", "OPTIONS"} >= ALLOWED_METHODS
-        assert "POST" not in ALLOWED_METHODS
+    def test_allowlist_is_exactly_get(self) -> None:
+        assert {"GET"} == ALLOWED_METHODS
 
 
 class TestHostAllowlist:
@@ -59,6 +62,14 @@ class TestHostAllowlist:
 
     def test_subdomain_of_allowed_host_passes(self) -> None:
         assert is_host_allowed("steamcdn-a.akamaihd.net") is False
+
+    def test_trailing_dot_fqdn_allowed(self) -> None:
+        # #30: a valid absolute FQDN with a trailing dot resolves identically -> must pass.
+        assert is_host_allowed("steamcommunity.com.") is True
+        assert is_host_allowed("raw.githubusercontent.com.") is True
+        # normalization must NOT broaden matching (embedded label still rejected):
+        assert is_host_allowed("steamcommunity.com.evil.com.") is False
+        assert is_host_allowed(".") is False
         assert is_host_allowed("foo.steamcommunity.com") is True
 
     def test_non_http_scheme_refused(self) -> None:
