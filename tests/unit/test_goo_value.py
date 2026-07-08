@@ -52,16 +52,23 @@ def _goo(value: str | int, *, success: object = 1) -> httpx.Response:
 
 
 class TestParseGooParams:
-    def test_extracts_item_type_and_border(self) -> None:
-        data = orjson.loads(_render(570, 4, 1).content)
-        assert _parse_goo_params(data) == (4, 1)
+    def test_extracts_from_json_text(self) -> None:
+        # The JSON render text embeds the GetGooValue call — a text match still finds it.
+        text = _render(570, 4, 1).content.decode()
+        assert _parse_goo_params(text) == (4, 1)
 
-    def test_missing_owner_actions_returns_none(self) -> None:
-        data = {"assets": {"753": {"6": {"1": {"appid": 753}}}}}
-        assert _parse_goo_params(data) is None
+    def test_extracts_from_ssr_html(self) -> None:
+        # Live shape (#131): Steam's SSR listing page embeds the call in a script, NOT JSON.
+        html = (
+            "<!DOCTYPE html><html><head></head><body><script>"
+            'g_rgAssets = {..."owner_actions":[{"link":"javascript:GetGooValue( '
+            '\'%contextid%\', \'%assetid%\', 570, 4, 0 )","name":"Turn into Gems..."}]};'
+            "</script></body></html>"
+        )
+        assert _parse_goo_params(html) == (4, 0)
 
-    @pytest.mark.parametrize("bad", [None, {}, {"assets": []}, {"assets": {"753": "x"}}])
-    def test_malformed_returns_none(self, bad: object) -> None:
+    @pytest.mark.parametrize("bad", ["", "<html>no goo here</html>", "GetGooValue(bad)"])
+    def test_no_match_returns_none(self, bad: str) -> None:
         assert _parse_goo_params(bad) is None
 
 

@@ -64,36 +64,25 @@ class GooRefreshResult:
     failed: int
 
 
-def _parse_goo_params(data: object) -> tuple[int, int] | None:
-    """Extract (item_type, border_color) from a listing render JSON, or None if absent."""
-    if not isinstance(data, dict):
-        return None
-    assets = data.get("assets")
-    if not isinstance(assets, dict):
-        return None
-    # assets[appid][contextid][assetid] -> description with owner_actions.
-    for by_context in assets.values():
-        if not isinstance(by_context, dict):
-            continue
-        for by_asset in by_context.values():
-            if not isinstance(by_asset, dict):
-                continue
-            for asset in by_asset.values():
-                if not isinstance(asset, dict):
-                    continue
-                for action in asset.get("owner_actions") or []:
-                    link = action.get("link") if isinstance(action, dict) else None
-                    if isinstance(link, str) and "GetGooValue" in link:
-                        m = _GOO_CALL_RE.search(link)
-                        if m:
-                            return int(m.group(2)), int(m.group(3))  # item_type, border_color
+def _parse_goo_params(text: str) -> tuple[int, int] | None:
+    """Extract (item_type, border_color) from a listing render response, or None if absent.
+
+    Matches the ``GetGooValue( '%contextid%', '%assetid%', <appid>, <item_type>,
+    <border_color> )`` call directly in the response TEXT. Steam migrated market listing
+    pages to server-rendered HTML (see #86), so the ``/render/`` endpoint returns that HTML
+    (with the call embedded in a script), NOT the old JSON ``assets`` structure — but the
+    call itself is present in either form, so a text match is robust to both. Verified live.
+    """
+    m = _GOO_CALL_RE.search(text)
+    if m:
+        return int(m.group(2)), int(m.group(3))  # groups: appid, item_type, border_color
     return None
 
 
 def fetch_goo_params(
     client: SafeClient, market_hash_name: str, currency: str = "USD"
 ) -> tuple[int, int] | None:
-    """Scrape (item_type, border_color) from a card's public listing render JSON.
+    """Scrape (item_type, border_color) from a card's public listing render page.
 
     Raises :class:`RateLimited` (429) so callers can hard-stop; other errors -> None.
     """
@@ -108,10 +97,7 @@ def fetch_goo_params(
         raise
     except (FetchError, SafetyViolationError):
         return None
-    try:
-        return _parse_goo_params(resp.json())
-    except ValueError:
-        return None
+    return _parse_goo_params(resp.content.decode("utf-8", "replace"))
 
 
 def fetch_goo_value(
