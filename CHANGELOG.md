@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-08
+
+### Fixed
+
+- **card-gem-arbitrage produced nothing against live Steam** (#133): the goo/gem-value
+  source required the listing `/render/` endpoint to return JSON, but Steam migrated market
+  listing pages to server-rendered HTML (the change behind #86), so every goo fetch failed
+  and the whole feature was silently non-functional. The `GetGooValue(...)` call is still in
+  the HTML, so it's now matched in the response text (robust to both HTML and the old JSON).
+  Found and fixed via live end-to-end validation.
+
 ## [1.4.1] - 2026-07-07
 
 ### Fixed
