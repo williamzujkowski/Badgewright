@@ -58,14 +58,52 @@ highest bar (see [`docs/optimizer-model.md`](./docs/optimizer-model.md)).
 
 - **Red/Green TDD** — failing test first, then minimum code to pass, then refactor.
   The safety and optimizer paths especially: never production code without a test.
-- **YAGNI** — build what a current milestone needs. This is a small local tool; no
-  speculative abstractions, no "just in case" plugin layers. The plan is milestone-
-  ordered in [`docs/backlog.md`](./docs/backlog.md) — work it top-down.
+- **Climb the reuse ladder before writing code** — stop at the first rung that holds:
+
+  ```
+  1. Does this need to exist?   -> no: skip it (YAGNI)
+  2. Already in this codebase?  -> reuse it, don't rewrite
+  3. Stdlib does it?            -> use it
+  4. Native platform feature?   -> use it
+  5. Installed dependency?      -> use it
+  6. One line?                  -> one line
+  7. Only then: the minimum that works
+  ```
+
+  The ladder runs *after* you understand the problem, not instead of it: read the code
+  the change touches and trace the real flow first. A small diff in the wrong place is
+  a second bug. This is a small local tool — no speculative abstractions, no "just in
+  case" plugin layers, and rung 5 is a real constraint here: a **new** dependency
+  widens the egress surface and must clear the safety boundary (see below). The plan is
+  milestone-ordered in [`docs/backlog.md`](./docs/backlog.md) — work it top-down.
+- **Fix the root cause, not the symptom** — a report names a symptom. Grep every caller
+  of the function you touch and fix the shared function once; one guard there is a
+  smaller diff than one per caller, and patching only the path the report names leaves
+  a sibling caller broken. The `(Foil Trading Card)` bug (#138) was exactly this: the
+  visible symptom was one wrong set size, the cause was one detector used everywhere.
 - **DRY** — single authoritative representation. Extract at the third occurrence.
+- **Never lazy about** — the safety boundary, input validation at trust boundaries,
+  provenance, error handling that prevents data loss, and the cost/XP math. Shortest
+  working diff wins *everywhere else*. A deliberate simplification with a known ceiling
+  (naive heuristic, O(n²) scan, single-currency assumption) gets a `ponytail:` comment
+  naming the ceiling and the upgrade path — not silence.
+- **Lazy code without its check is unfinished** — non-trivial logic leaves behind the
+  smallest thing that fails if the logic breaks. For a claim that closes an issue or
+  backs a safety property, prove the test fails without the fix before trusting it.
 - **Provenance always** — every imported datum carries a `SourceRecord`
   (source/url/time/parser/hash/TTL). No un-attributed data enters the store.
 - **Constants, not magic numbers** — Steam mechanics drift (XP per craft, contextids,
   currency ids). Keep them in `config.py` and cite the source in `docs/data-sources.md`.
+
+The reuse ladder, the root-cause rule, the "never lazy about" carve-outs and the
+`ponytail:` marker are adapted from [ponytail](https://github.com/DietrichGebert/ponytail)
+(MIT). Its rules are followed here as written into this file — deliberately **not**
+vendored as files or hooks: this is a Python project with a strict egress boundary, and
+importing a multi-agent JS plugin to enforce minimalism would be the exact over-build the
+ladder rejects. For the always-on version in your own client:
+`/plugin marketplace add DietrichGebert/ponytail` then `/plugin install ponytail@ponytail`.
+Where ponytail and the safety boundary ever disagree, **the boundary wins** — the one rule
+at the top of this file overrides everything.
 
 ## Default working mode — fan out, verify, then implement
 
@@ -107,7 +145,10 @@ past a rate-limit block or captcha.
 
 ## Self-check before "done"
 
-- [ ] TDD/YAGNI/DRY held; tests cover happy path + edge + error cases.
+- [ ] TDD/DRY held and the reuse ladder was climbed (no new dependency or abstraction
+      that a lower rung already covered); tests cover happy path + edge + error cases.
+- [ ] Any test backing a safety property or closing an issue was shown to FAIL without
+      the fix — a green test that cannot fail is worse than no test.
 - [ ] **Safety boundary intact** — no mutating verb, no new egress host without an ADR
   edit, no secret field, AST gate green.
 - [ ] Wiring complete — new CLI commands registered in the Typer app; new models
