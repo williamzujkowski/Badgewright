@@ -46,6 +46,20 @@ precedence. This is **not** general knapsack — uniform item value collapses it
 
 Greedy therefore ships as the MVP optimizer and is expected to be exact.
 
+### Known limitation: exactness weakens at a tight budget
+
+The argument above is a statement about *ordering*, and it holds. What it does not
+cover is the **0/1 boundary effect** when the budget runs out mid-list: taking the
+cheapest-per-XP item first can consume budget that a different combination would have
+spent better. With `--budget 20`, a \$19 / 180 XP badge is chosen ahead of a \$18 + \$3
+pair worth 200 XP, and the pair is then unaffordable.
+
+This is disclosed at the point of use — `sbo optimize` prints a note whenever a budget
+is set — and it is recorded here so it survives outside transient CLI output. It is
+**not** being fixed: the only exact remedy is a DP/ILP solver, which the shelf spec
+below deliberately keeps unbuilt. Revisit only if a real user plan turns out
+materially sub-optimal; see the closing discussion on issue #44.
+
 ## When ILP is actually warranted (shelf spec)
 
 Only once item value stops being uniform or constraints stop being separable:

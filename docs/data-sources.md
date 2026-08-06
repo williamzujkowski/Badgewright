@@ -9,16 +9,21 @@ The facts below were verified during planning (2026-07-04). Steam mechanics drif
 treat the numeric constants as **config**, not gospel, and re-verify against a live
 account before trusting a plan.
 
-## Steam OpenID (identity only)
+## Identity (no login path)
 
-- Endpoint: `https://steamcommunity.com/openid/login` (OpenID 2.0).
-- On success the user returns with `openid.claimed_id =
-  https://steamcommunity.com/openid/id/<SteamID64>`; strip the trailing digits.
-- The relying party never sees the password or Steam Guard — auth happens entirely
-  on Steam's domain.
-- **Always verify the signature** via `check_authentication` before trusting
-  `claimed_id`; skipping it lets an attacker forge any SteamID.
-- We keep only the validated SteamID64 and discard the response (no cookie kept).
+Badgewright does **not** authenticate. An earlier design used Steam OpenID for
+identity-only sign-in; it was rejected, and no auth flow of any kind ships.
+
+- A SteamID64 is resolved from public data alone: a raw ID, a profile URL, or a vanity
+  name looked up through the profile XML endpoint via `SafeClient`.
+- Hostile vanity strings are rejected before any network call.
+- `SafeClient` clears its cookie jar on every request, so no Steam session cookie can
+  be persisted or reused.
+- Reading a user's inventory and badges therefore requires only that their Steam
+  profile be public — never a credential.
+- The single optional credential is a Steam **Web API key** (badge levels only), read
+  from `SBO_STEAM_API_KEY` at call time, redacted from logged URLs, never written to
+  disk.
 
 ## Market price — `priceoverview`
 

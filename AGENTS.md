@@ -17,8 +17,9 @@ Subscriber Agreement (§4.C bans scripts/bots/macros/automation interacting with
 Steam). Read [`docs/adr/0001-safety-boundary.md`](./docs/adr/0001-safety-boundary.md)
 before touching anything network-facing.
 
-**Allowed:** read public Steam data; Steam OpenID for identity (SteamID only, never
-credentials); import user files/snapshots; fetch market price/listing metadata with
+**Allowed:** read public Steam data; identify by SteamID resolved from public data
+(**no login path at all** — never credentials); import user files/snapshots; fetch
+market price/listing metadata with
 aggressive caching + conservative rate limiting; generate CSV/HTML/checklist reports
 and market **links**; open Steam pages for manual review.
 
@@ -123,7 +124,7 @@ src/steam_badge_optimizer/
   config.py         # Settings + well-known Steam constants (appid 753/ctx 6, XP=100, currencies)
   safety.py         # THE read-only boundary: assert_safe_request + allowlists
   models/           # pydantic domain models (provenance.py = SourceRecord)
-  sources/          # openid, steam_webapi, steam_badges_db, inventory, market, price_history, manual_import
+  sources/          # steamid, badge_progress, steam_badges_db, steam_inventory, steam_market, market_sweep, booster_market, goo_value, card_discovery, http_client
   normalize/        # cards, badges, inventory, prices
   optimize/         # greedy (primary), ilp (shelf spec), scoring, constraints
   analytics/        # spreads, volatility, liquidity, arbitrage, anomalies (research only)

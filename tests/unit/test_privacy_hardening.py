@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 
 import pytest
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ from steam_badge_optimizer.cli import app
 from steam_badge_optimizer.db import Store
 from steam_badge_optimizer.db.schema import MIGRATIONS
 from steam_badge_optimizer.models import SteamApp
+from steam_badge_optimizer.models.provenance import SourceRecord
 
 runner = CliRunner()
 
@@ -127,3 +129,34 @@ class TestEgressAudit:
         assert importlib.util.find_spec(module) is None, (
             f"{module} is installed — review the dependency that pulled it in"
         )
+
+
+class TestNoRawBodyPersistence:
+    """Nothing ever persists a Steam response body (#12).
+
+    The cached-HTML-sanitization issue was closed as obsolete on the grounds that no
+    raw fetched bytes reach disk — only a ``raw_sha256`` hash plus metadata. That is a
+    premise about the schema rather than a behaviour, so it is pinned here: if a future
+    change adds a column that could hold a response body, this fails and the closure is
+    revisited rather than silently rotting.
+    """
+
+    # Column names that would imply storing a fetched body rather than a digest of it.
+    FORBIDDEN_BODY_COLUMNS = ("raw_html", "raw_body", "html", "body", "payload", "response")
+
+    def test_no_schema_column_holds_a_response_body(self) -> None:
+        ddl = " ".join(stmt for migration in MIGRATIONS for stmt in migration).lower()
+        # A BLOB column is the most direct way a body would land on disk.
+        assert "blob" not in ddl, "schema declares a BLOB column — could hold a response body"
+        for column in self.FORBIDDEN_BODY_COLUMNS:
+            # Match a column declaration, not an incidental substring (e.g. "body" in a
+            # comment or "html_report"); columns are declared as "<name> <TYPE>".
+            assert not re.search(rf"\b{column}\s+(text|blob|varchar)", ddl), (
+                f"schema declares a {column!r} column — response bodies must not be persisted"
+            )
+
+    def test_provenance_keeps_only_a_digest(self) -> None:
+        # The one model that touches fetched bytes exposes a hash, never the bytes.
+        assert "raw_sha256" in SourceRecord.model_fields
+        for name, field in SourceRecord.model_fields.items():
+            assert field.annotation is not bytes, f"SourceRecord.{name} holds raw bytes"
