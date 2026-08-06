@@ -119,3 +119,29 @@ class TestGreedy:
     def test_budget_currency_mismatch_rejected(self) -> None:
         with pytest.raises(ValueError):
             build_plan(_report(_badge(1, 100)), budget=Money(100, "EUR"))
+
+
+def test_documented_tight_budget_suboptimality() -> None:
+    """Pins the worked example in docs/optimizer-model.md (#44).
+
+    Greedy is exact when ordering is all that matters, but at a tight budget the 0/1
+    boundary bites: the best-ratio badge consumes budget that a different combination
+    would have spent better. This is a known, disclosed limitation — the test exists so
+    the documented numbers stay true, not because the behaviour is desired.
+    """
+    a = _badge(1, 1200, crafts=3)  # $12 / 300 XP -> $0.040 per XP (best ratio)
+    b = _badge(2, 1000, crafts=2)  # $10 / 200 XP -> $0.050 per XP
+    c = _badge(3, 1000, crafts=2)  # $10 / 200 XP -> $0.050 per XP
+
+    plan = build_plan(_report(a, b, c), budget=Money(2000, "USD"))
+
+    # Greedy takes A first, leaving $8 — neither B nor C fits.
+    assert [x.appid for x in plan.chosen] == [1]
+    assert plan.total_cost == Money(1200, "USD")
+    assert sum(x.expected_xp for x in plan.chosen) == 300
+    assert [x.appid for x in plan.skipped_over_budget] == [2, 3]
+
+    # B + C would have cost exactly the budget and returned 400 XP.
+    assert b.known_cost is not None and c.known_cost is not None
+    assert b.known_cost.cents + c.known_cost.cents == 2000
+    assert b.expected_xp + c.expected_xp == 400

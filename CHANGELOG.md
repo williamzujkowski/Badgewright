@@ -6,6 +6,34 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Security docs described an authentication flow that does not exist.** `SECURITY.md`,
+  `AGENTS.md`, the safety ADR and `docs/data-sources.md` all documented Steam OpenID
+  sign-in as the identity mechanism — it was never built and now contradicts the README's
+  no-login-path boundary. Identity is a SteamID resolved from public data; there is no auth
+  flow of any kind.
+- **`SECURITY.md` overstated the permitted HTTP surface**, claiming the choke-point guard
+  allows `GET`/`HEAD`/`OPTIONS`. The guard is `GET`-only (`ALLOWED_METHODS`); the published
+  policy now matches the code.
+
+### Added
+
+- Invariant tests pinning that no Steam response body is ever persisted (the premise behind
+  closing the cached-HTML-sanitization item): a behavioural round trip that fetches a
+  response carrying a sentinel the parser ignores, persists it, then scans the database
+  file for those bytes, plus two structural checks over the schema and provenance model.
+  All three were mutation-tested against the regressions they claim to catch.
+- Negative test for the provenance attribution rule, and a test pinning the worked example
+  in the optimizer's new known-limitation section so the documented numbers cannot drift.
+
+### Changed
+
+- Backlog groomed against the code: 15 open issues to 7, each survivor carrying a concrete
+  user-facing symptom. `docs/backlog.md` re-synced with what actually shipped, including
+  items ruled infeasible by Steam's SSR migration. The greedy optimizer's tight-budget
+  limitation is now recorded in `docs/optimizer-model.md` rather than only in CLI output.
+
 ## [1.4.2] - 2026-07-08
 
 ### Fixed

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+from pydantic import ValidationError
+
 from steam_badge_optimizer.models.provenance import SourceKind, SourceRecord
 
 
@@ -47,3 +50,10 @@ def test_manual_import_has_no_url() -> None:
     rec = _rec(kind=SourceKind.MANUAL_IMPORT, url=None, file_name="inventory.json")
     assert rec.url is None
     assert rec.file_name == "inventory.json"
+
+
+def test_unattributed_record_is_rejected() -> None:
+    # #0.4 negative path: a record with neither a url nor a file_name has no origin,
+    # so it must not be constructible at all — the persistence layer never sees it.
+    with pytest.raises(ValidationError, match="needs a url or a file_name"):
+        _rec(url=None, file_name=None)

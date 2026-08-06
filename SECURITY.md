@@ -7,12 +7,11 @@ Badgewright is a **local, read-only** tool. Its central security property is tha
 logs in with credentials, or automates any Steam action. This is enforced
 structurally (see [`docs/adr/0001-safety-boundary.md`](docs/adr/0001-safety-boundary.md)):
 
-- A choke-point HTTP guard (`steam_badge_optimizer.safety`) permits only
-  `GET`/`HEAD`/`OPTIONS` to an allowlisted set of read-only hosts and trips on known
-  action routes.
+- A choke-point HTTP guard (`steam_badge_optimizer.safety`) permits only `GET` to an
+  allowlisted set of read-only hosts and trips on known action routes.
 - An AST-based CI gate rejects any mutating HTTP verb or egress-bypassing import.
-- No Steam password or Steam Guard secret is ever collected or stored; identity uses
-  Steam OpenID (SteamID only).
+- No Steam password or Steam Guard secret is ever collected or stored — there is no
+  login path at all. Identity is a bare SteamID, resolved from public data.
 - User data stays local (SQLite); no telemetry, no hosted backend.
 
 If you believe a change or dependency could let the tool cross that boundary, treat

@@ -21,8 +21,9 @@ analytics assistant**, not a market bot.
 
 Badgewright stays entirely on the **read / calculate / export** side of the line.
 
-**Allowed:** read public Steam data; identify the user via Steam OpenID (SteamID
-only, never credentials); import user-provided files/snapshots; fetch market
+**Allowed:** read public Steam data; identify the user by SteamID resolved from
+public data alone (id, profile URL, or vanity name) — there is **no login path of any
+kind**; import user-provided files/snapshots; fetch market
 listing/price metadata with aggressive caching and conservative rate limiting;
 generate checklists, CSV/HTML reports, and market links; open Steam pages for
 **manual** review.
@@ -53,10 +54,14 @@ holds.
    `requests`/`aiohttp`/`socket` import (bypassing the choke point) is introduced.
    Chosen over keyword grep because it ignores comments/docstrings and matches the
    actual dangerous construct.
-3. **No secrets by construction** — OpenID yields only a SteamID64; no schema field
-   for `steamLoginSecure`, `sessionid`, `shared_secret`, or `identity_secret` may
-   exist (asserted by test). The OpenID response is discarded after ID extraction;
-   no Steam session cookie is persisted or reused.
+3. **No secrets by construction** — there is no authentication flow to yield a secret
+   in the first place; identity is a bare SteamID64 resolved from public data. No
+   schema field for `steamLoginSecure`, `sessionid`, `shared_secret`, or
+   `identity_secret` may exist (asserted by test). `SafeClient` clears its cookie jar
+   on every request, so no Steam session cookie is ever persisted or reused
+   (asserted by test). The one optional credential, a Steam Web API key, is read from
+   `SBO_STEAM_API_KEY` at call time, redacted from logged URLs, and never written to
+   disk.
 
 ## Consequences
 
@@ -69,4 +74,5 @@ holds.
 ## References
 
 - Steam Subscriber Agreement §4.C — <https://store.steampowered.com/subscriber_agreement/>
-- Steam OpenID (identity only) — <https://partner.steamgames.com/doc/features/auth>
+- Steam OpenID — <https://partner.steamgames.com/doc/features/auth> — evaluated as an
+  identity mechanism and **rejected**; Badgewright opens no auth flow at all.
