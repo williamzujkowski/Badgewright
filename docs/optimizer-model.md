@@ -50,9 +50,21 @@ Greedy therefore ships as the MVP optimizer and is expected to be exact.
 
 The argument above is a statement about *ordering*, and it holds. What it does not
 cover is the **0/1 boundary effect** when the budget runs out mid-list: taking the
-cheapest-per-XP item first can consume budget that a different combination would have
-spent better. With `--budget 20`, a \$19 / 180 XP badge is chosen ahead of a \$18 + \$3
-pair worth 200 XP, and the pair is then unaffordable.
+best-ratio badge first can consume budget that a different combination would have spent
+better. Under `--budget 20.00`, with three complete badges available —
+
+| badge | cost | XP | cost/XP |
+|-------|------|-----|---------|
+| A | \$12 | 300 | \$0.040 |
+| B | \$10 | 200 | \$0.050 |
+| C | \$10 | 200 | \$0.050 |
+
+greedy takes A on its best ratio, leaving \$8 — so neither B nor C fits, and the plan
+ends at **300 XP for \$12**. Buying B + C instead costs exactly \$20 and yields **400
+XP**. Greedy leaves 100 XP on the table.
+
+This example is pinned by `test_documented_tight_budget_suboptimality` in
+`tests/unit/test_greedy.py`, so the numbers cannot drift away from the behaviour.
 
 This is disclosed at the point of use — `sbo optimize` prints a note whenever a budget
 is set — and it is recorded here so it survives outside transient CLI output. It is

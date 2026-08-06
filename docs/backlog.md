@@ -178,7 +178,7 @@ becomes an index. Items marked ✅ are done in the current scaffold.
   SQLite persists in volume.
 - [x] **9.3** First-release checklist — SemVer + conventional commits documented in
   `CONTRIBUTING.md`, populated `CHANGELOG.md`, `SECURITY.md`, and a tag-driven release
-  flow exercised eleven times through v1.4.2.
+  flow exercised across 20 tagged releases, v0.1.0 through v1.4.2.
 - [ ] **9.4 (security)** Runtime egress backstop — static gates miss
   `eval`/native/dependency code. **Not** in-container iptables: that needs `NET_ADMIN`,
   contradicting the image's drop-all-capabilities hardening. Ship instead as an

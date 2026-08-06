@@ -19,9 +19,13 @@ All notable changes to this project are documented here. Format loosely follows
 
 ### Added
 
-- Invariant test pinning that no Steam response body is ever persisted (the premise behind
-  closing the cached-HTML-sanitization item), and a negative test for the provenance
-  attribution rule.
+- Invariant tests pinning that no Steam response body is ever persisted (the premise behind
+  closing the cached-HTML-sanitization item): a behavioural round trip that fetches a
+  response carrying a sentinel the parser ignores, persists it, then scans the database
+  file for those bytes, plus two structural checks over the schema and provenance model.
+  All three were mutation-tested against the regressions they claim to catch.
+- Negative test for the provenance attribution rule, and a test pinning the worked example
+  in the optimizer's new known-limitation section so the documented numbers cannot drift.
 
 ### Changed
 
