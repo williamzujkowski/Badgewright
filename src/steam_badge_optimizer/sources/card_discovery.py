@@ -12,14 +12,17 @@ Fail-closed (per the approving votes):
   to market truth (the static catalog undercounts as games add cards) — but the catalog is
   always a FLOOR: a market undercount (a real card with no live listings) never lowers it
   (#79, ``reconcile_set_size``).
-* Foils are excluded from the set count via both the card ``type`` and a ``(Foil)`` name
-  check. Discovered foils are still stored (flagged) for later foil support.
+* Foils are excluded from the set count via both the card ``type`` and a parenthesised
+  ``(Foil`` name check — older sets spell it ``(Foil Trading Card)`` and report a plain
+  ``Trading Card`` type, so the name is the only signal there. Discovered foils are still
+  stored (flagged) for later foil support.
 
 The endpoint is unofficial, so a manual-import fallback is provided for blocked users.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -48,6 +51,10 @@ __all__ = [
 
 SEARCH_URL = "https://steamcommunity.com/market/search/render/"
 PARSER_VERSION = "1"
+
+#: A parenthesised "Foil" marker in the market_hash_name: matches both the modern
+#: "(Foil)" suffix and the older "(Foil Trading Card)" spelling, but not "(Foilball)".
+_FOIL_NAME_RE = re.compile(r"\(foil\b", re.IGNORECASE)
 CATALOG_TTL_SECONDS = 7 * 24 * 3600  # a set's card list rarely changes
 PAGE_SIZE = 100
 MAX_PAGES = 5
@@ -82,10 +89,13 @@ class DiscoveryResult:
 
 
 def _is_foil(hash_name: str, card_type: str) -> bool:
-    # The canonical market_hash_name carries a "(Foil)" suffix regardless of locale —
-    # the reliable signal. Fall back to an EXACT type match (not a substring, so a game
-    # title like "Foilball Trading Card" doesn't misclassify a normal card as foil).
-    if "(foil)" in hash_name.lower():
+    # The canonical market_hash_name carries a parenthesised "Foil" marker regardless of
+    # locale — the reliable signal. Older sets spell it "(Foil Trading Card)" rather than
+    # "(Foil)", so match "(Foil" followed by a word boundary: that catches both spellings
+    # while a game title like "Foilball Trading Card" (no paren) or a hypothetical
+    # "(Foilball)" still classifies as a normal card. Fall back to an EXACT type match
+    # (not a substring, for the same reason).
+    if _FOIL_NAME_RE.search(hash_name):
         return True
     return card_type.strip().lower() == "foil trading card"
 

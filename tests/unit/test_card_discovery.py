@@ -37,6 +37,32 @@ class TestParse:
             "440-Heavy (Foil)": True,
         }
 
+    def test_legacy_foil_trading_card_spelling_is_flagged(self) -> None:
+        # Older sets spell the marker "(Foil Trading Card)" rather than "(Foil)". Steam
+        # reports their `type` as a plain "Trading Card", so the NAME is the only signal.
+        # Missing it counts a foil as a set card, which then ratchets set_size up (#79)
+        # and puts a foil on the user's shopping list for a regular badge.
+        entries = [
+            ("248820-Lemurian (Foil Trading Card)", "Trading Card", True),
+            ("248820-Lemurian (Trading Card)", "Trading Card", False),
+            ("248820-Wisp (Foil Trading Card)", "Trading Card", True),
+            ("323190-Leader (Foil)", "Foil Trading Card", True),
+            ("323190-Leader", "Trading Card", False),
+            # Neither a paren-marker nor an exact type match: still a normal card.
+            ("99-Card (Foilball)", "Trading Card", False),
+        ]
+        body = orjson.dumps(
+            {
+                "total_count": len(entries),
+                "results": [
+                    {"hash_name": name, "asset_description": {"type": card_type}}
+                    for name, card_type, _ in entries
+                ],
+            }
+        )
+        flags = {c.market_hash_name: c.is_foil for c in cd.parse_search_results(body)}
+        assert flags == {name: want for name, _, want in entries}
+
     @pytest.mark.parametrize("bad", [b"not json", b"[1,2]", b'{"success":true}'])
     def test_bad_envelope_raises(self, bad: bytes) -> None:
         with pytest.raises(cd.CardDiscoveryError):
