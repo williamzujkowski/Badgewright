@@ -25,6 +25,18 @@ from steam_badge_optimizer.sources.http_client import SafeClient
 
 runner = CliRunner()
 
+# Substrings that make a field/column name credential-shaped whatever it is called. An
+# exact denylist only blocks the names someone already thought of.
+SECRET_NAME_FRAGMENTS = (
+    "secret",
+    "password",
+    "passwd",
+    "credential",
+    "steamguard",
+    "session",
+    "token",
+)
+
 # Anything that would smell like a stored Steam credential/session secret.
 FORBIDDEN_SECRET_NAMES = {
     "steamloginsecure",
@@ -112,14 +124,21 @@ class TestDeleteAll:
 
 class TestNoStoredSecrets:
     def test_no_model_field_is_a_credential(self) -> None:
-        # Structural guarantee: the domain models cannot hold a Steam credential/secret.
+        # The domain models must not be able to hold a Steam credential/secret. Matched on
+        # SUBSTRINGS, not an exact denylist: an exact list only blocks names someone already
+        # thought of, so a field like `steam_session_token` would sail through it.
         checked = 0
         for name in dir(models_pkg):
             obj = getattr(models_pkg, name)
             if isinstance(obj, type) and issubclass(obj, BaseModel):
                 checked += 1
                 for field in obj.model_fields:
-                    assert field.lower() not in FORBIDDEN_SECRET_NAMES, f"{name}.{field}"
+                    lowered = field.lower()
+                    assert lowered not in FORBIDDEN_SECRET_NAMES, f"{name}.{field}"
+                    for fragment in SECRET_NAME_FRAGMENTS:
+                        assert fragment not in lowered, (
+                            f"{name}.{field} looks like a credential ({fragment!r})"
+                        )
         assert checked >= 8  # sanity: we actually inspected the models
 
     def test_no_schema_column_is_a_credential(self) -> None:

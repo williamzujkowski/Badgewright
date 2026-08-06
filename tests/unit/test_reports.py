@@ -124,6 +124,12 @@ class TestInertHtml:
             "<html><body>no csp here</body></html>",
             '<html><head><meta http-equiv="Content-Security-Policy" content="x"></head>'
             '<body><a href="https://steamcommunity.com/market/sellitem/1">x</a></body></html>',
+            # "/" separates attributes as validly as a space, so these are live handlers.
+            # A whitespace-only pattern walks straight past them.
+            '<html><head><meta http-equiv="Content-Security-Policy" content="x"></head>'
+            "<body><img/onerror=alert(1) src=x></body></html>",
+            '<html><head><meta http-equiv="Content-Security-Policy" content="x"></head>'
+            "<body><svg/onload=alert(1)></body></html>",
         ],
     )
     def test_assert_inert_rejects_violations(self, bad: str) -> None:

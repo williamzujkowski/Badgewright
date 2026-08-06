@@ -123,6 +123,7 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo safety` | Print the enforced read-only boundary. |
 | `sbo init` | Create the local data directory. |
 | `sbo catalog import [--online\|--file F]` | Import the card-set catalog (game → set size). |
+| `sbo catalog list` | List imported apps that have trading-card badge sets. |
 | `sbo steamid <id\|url\|vanity> [--online]` | Resolve a SteamID64 (no login). |
 | `sbo inventory import --steamid X [--online]` | Ingest your public card inventory. |
 | `sbo inventory value [--top N]` | Value your held cards at the current market (offline; seed prices first). |
@@ -135,7 +136,9 @@ Run `sbo <command> --help` for the exact flags. Networked commands are always op
 | `sbo market gems [--set-size N] [--online --confirm]` | Value gems in real money (Sack of Gems) + booster gem cost; reads cached price, `--online --confirm` refreshes. |
 | `sbo market booster-arbitrage --online --confirm` | Flag Booster Packs cheaper than their card contents (research; modeled EV). |
 | `sbo market card-gem-arbitrage [--online --confirm]` | Flag cards cheaper than the gems they yield (research; foils). |
-| `sbo market scan-sets / scan-weakness / anomalies` | Market-intelligence research (never advice). |
+| `sbo market scan-sets` | Research: set-level cost and one-card-dominates signals. |
+| `sbo market scan-weakness` | Research: rank cards by liquidity-weighted price-weakness. |
+| `sbo market anomalies` | Research: flag unusual price moves from stored history. |
 | `sbo optimize [--budget B] [--badge-level L] [--auto-fetch --max-games N]` | Cheapest plan to a target level/budget (greedy); `--auto-fetch` discovers + prices your relevant games first. |
 | `sbo report purchase-plan --out F` | Export a purchase plan (CSV / inert HTML). |
 | `sbo report cheapest-badges --out F` | Export the cheapest-badges ranking (CSV / inert HTML). |

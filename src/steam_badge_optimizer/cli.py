@@ -1,10 +1,10 @@
 """Badgewright command-line interface.
 
-The command surface mirrors the plan's sketch (``sbo init``, ``catalog import``,
-``inventory import``, ``optimize``, ``report``, ``market ...``). Only the pieces
-implemented in the current milestone do real work; the rest are registered stubs
-that fail loudly with the milestone they belong to, so the wiring is complete and
-discoverable (``--help`` lists everything) without pretending to be finished.
+The command surface (``sbo init``, ``catalog import``, ``inventory import``,
+``optimize``, ``report``, ``market ...``) is fully implemented — every registered
+command does real work. ``--help`` lists everything; each command's own help gives
+the exact flags. Network access is opt-in per command (``--online``), and the bulk
+paths additionally require ``--confirm``.
 
 Nothing in this CLI can operate a Steam account — see :mod:`steam_badge_optimizer.safety`.
 """
