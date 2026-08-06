@@ -20,6 +20,7 @@ from steam_badge_optimizer.models import (
     PriceSnapshot,
     SourceKind,
     SourceRecord,
+    SteamApp,
 )
 
 
@@ -31,6 +32,7 @@ def _snap(
     low: int,
     median: int | None = None,
     volume: int = 100,
+    listings: int | None = None,
     when: datetime | None = None,
     currency: str = "USD",
     ttl: int = 86400,
@@ -41,6 +43,7 @@ def _snap(
             lowest=Money(low, currency),
             median=Money(median, currency) if median is not None else None,
             volume=volume,
+            listings=listings,
             source=SourceRecord(
                 kind=SourceKind.STEAM_MARKET,
                 url="https://steamcommunity.com/market/priceoverview/",
@@ -175,6 +178,29 @@ class TestScanSets:
             assert sig.total_cost == Money(100, "USD")
             assert abs((sig.card_dominance or 0) - 0.9) < 1e-9
             assert any("bottleneck" in s for s in sig.signals)
+
+    def test_market_outgrown_catalog_agrees_with_cheapest_badges(self) -> None:
+        # The catalog undercounts as games add cards, so the market can hold MORE normal
+        # cards than set_size. cheapest_badges/booster_arbitrage cost those sets; scan_sets
+        # used to reject them on an exact-equality check, so the same store produced two
+        # different answers to the same question (#144). Assert the two AGREE — the defect
+        # was divergence between siblings, so testing scan_sets alone would not have caught it.
+        from steam_badge_optimizer.analytics import rank_cheapest_badges
+
+        with Store.in_memory() as store:
+            store.upsert_app(SteamApp(appid=1, name="Outgrown"))
+            store.upsert_badge_set(BadgeSet(appid=1, set_size=2))  # stale: market has 3
+            for name, cost in [("1-A", 20), ("1-B", 20), ("1-C", 20)]:
+                store.upsert_card(Card(appid=1, market_hash_name=name))
+                _snap(store, 1, name, low=cost, volume=100, listings=25)
+
+            sig = next(s for s in scan_sets(store) if s.appid == 1)
+            assert sig.complete is True, "scan_sets dropped a set the market has outgrown"
+            assert sig.total_cost == Money(60, "USD")  # all three cards, not just two
+            assert sig.set_size == 3, "should report what was costed, not the stale catalog"
+
+            ranked = next(r for r in rank_cheapest_badges(store, min_listings=1) if r.appid == 1)
+            assert ranked.total_cost == sig.total_cost, "siblings disagree on the same store"
 
     def test_incomplete_set_flagged(self) -> None:
         with Store.in_memory() as store:

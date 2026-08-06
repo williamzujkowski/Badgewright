@@ -168,7 +168,11 @@ def scan_sets(store: Store, *, currency: str = "USD") -> list[SetSignal]:
         cards = store.cards_for_app(appid, include_foil=False)
         notes: list[str] = []
         unit_cents: list[int] = []
-        priced_all = len(cards) == badge_set.set_size and badge_set.set_size > 0
+        # ">=", not "==": the market is authoritative for the real card list, and some games
+        # legitimately have more normal cards than the (sometimes stale) catalog count. An
+        # exact match would drop those sets as "not fully known" while cheapest_badges and
+        # booster_arbitrage happily cost them from the same data (#144).
+        priced_all = badge_set.set_size > 0 and len(cards) >= badge_set.set_size
         for card in cards:
             snap = store.latest_price(appid, card.market_hash_name)
             unit = (snap.lowest or snap.median) if snap else None
@@ -185,7 +189,8 @@ def scan_sets(store: Store, *, currency: str = "USD") -> list[SetSignal]:
             signals_out.append(
                 SetSignal(
                     appid=appid,
-                    set_size=badge_set.set_size,
+                    # Report what was actually costed, not the stale catalog number.
+                    set_size=len(unit_cents),
                     complete=True,
                     total_cost=Money(total, currency),
                     card_dominance=dominance,
