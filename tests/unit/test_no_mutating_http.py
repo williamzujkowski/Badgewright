@@ -19,8 +19,19 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "steam_badge_optimizer"
 # call any of these against a network client.
 FORBIDDEN_HTTP_VERBS = {"post", "put", "patch", "delete"}
 
-# Modules whose direct use would bypass the SafeClient choke point.
-FORBIDDEN_IMPORT_ROOTS = {"requests", "urllib3", "aiohttp", "socket"}
+# Modules whose direct use would bypass the SafeClient choke point. `httpx` is on this
+# list even though SafeClient is built on it: a plain `httpx.get(url)` is a *read*, so it
+# never trips the verb check above, yet it skips assert_safe_request, the host allowlist,
+# the forbidden-path tripwire, redirect refusal, rate limiting and URL redaction — i.e.
+# every control that makes this tool read-only-by-construction rather than by convention.
+FORBIDDEN_IMPORT_ROOTS = {"requests", "urllib3", "aiohttp", "socket", "httpx"}
+
+# The single module allowed to import the underlying transport: it IS the choke point.
+# Keyed by path relative to SRC_ROOT so a same-named file elsewhere cannot inherit the
+# exemption. Adding an entry here is a reviewed change to the safety boundary (see the ADR).
+TRANSPORT_EXEMPT: dict[str, frozenset[str]] = {
+    "sources/http_client.py": frozenset({"httpx"}),
+}
 
 
 def _python_files() -> list[Path]:
@@ -57,7 +68,8 @@ def test_no_bypass_of_safe_http_client() -> None:
                 roots = {alias.name.split(".")[0] for alias in node.names}
             elif isinstance(node, ast.ImportFrom) and node.module:
                 roots = {node.module.split(".")[0]}
-            for forbidden in roots & FORBIDDEN_IMPORT_ROOTS:
+            exempt = TRANSPORT_EXEMPT.get(path.relative_to(SRC_ROOT).as_posix(), frozenset())
+            for forbidden in (roots & FORBIDDEN_IMPORT_ROOTS) - exempt:
                 offenders.append(f"{path.name}:{node.lineno} -> import {forbidden}")
     assert not offenders, (
         "Import that bypasses the SafeClient egress choke point. "

@@ -35,10 +35,16 @@ def _walk(t: typer.Typer, prefix: str = "") -> list[str]:
     return leaves
 
 
+def _documented(command: str) -> bool:
+    """True if the README shows this command being invoked, under either binary name."""
+    return any(f"{binary} {command}" in README for binary in ("sbo", "badgewright"))
+
+
 def test_readme_mentions_every_command() -> None:
     leaves = _walk(app)
     assert len(leaves) > 15, "command introspection found too few commands — check the walker"
-    # Every command's leaf name (last token) must appear in the README so a rename/removal
-    # or a new undocumented command trips this guard.
-    missing = [cmd for cmd in leaves if cmd.split()[-1] not in README]
-    assert not missing, f"README.md does not mention these CLI commands: {missing}"
+    # Match the FULL invocation, not the leaf token. A bare last-token search passes on
+    # coincidence: "list" is satisfied by the words "allowlist"/"listing" elsewhere in the
+    # prose, so `catalog list` could vanish from the docs entirely and this stayed green.
+    missing = [cmd for cmd in leaves if not _documented(cmd)]
+    assert not missing, f"README.md does not document these CLI commands: {missing}"

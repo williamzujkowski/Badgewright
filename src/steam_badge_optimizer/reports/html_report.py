@@ -30,7 +30,9 @@ _CSP = (
     "base-uri 'none'; form-action 'none'"
 )
 _SCRIPT_RE = re.compile(r"<\s*script", re.IGNORECASE)
-_HANDLER_RE = re.compile(r"<[^>]*\son\w+\s*=", re.IGNORECASE)
+# A "/" separates attributes just as validly as whitespace, so `<img/onerror=x>` and
+# `<svg/onload=x>` are live handlers that a whitespace-only pattern walks straight past.
+_HANDLER_RE = re.compile(r"<[^>]*[\s/]on\w+\s*=", re.IGNORECASE)
 _BAD_SCHEME_RE = re.compile(r"(javascript|vbscript|data|steam)\s*:", re.IGNORECASE)
 # Matches href/src attribute values only (not text nodes).
 _URL_ATTR_RE = re.compile(r'\b(href|src)\s*=\s*"([^"]*)"', re.IGNORECASE)
