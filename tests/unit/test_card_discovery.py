@@ -48,8 +48,9 @@ class TestParse:
             ("248820-Wisp (Foil Trading Card)", "Trading Card", True),
             ("323190-Leader (Foil)", "Foil Trading Card", True),
             ("323190-Leader", "Trading Card", False),
-            # Neither a paren-marker nor an exact type match: still a normal card.
+            # Neither a known paren-marker nor an exact type match: still normal cards.
             ("99-Card (Foilball)", "Trading Card", False),
+            ("99-Tin Foil Hat (Foil Hat)", "Trading Card", False),
         ]
         body = orjson.dumps(
             {

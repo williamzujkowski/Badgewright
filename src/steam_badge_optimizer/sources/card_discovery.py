@@ -12,10 +12,10 @@ Fail-closed (per the approving votes):
   to market truth (the static catalog undercounts as games add cards) — but the catalog is
   always a FLOOR: a market undercount (a real card with no live listings) never lowers it
   (#79, ``reconcile_set_size``).
-* Foils are excluded from the set count via both the card ``type`` and a parenthesised
-  ``(Foil`` name check — older sets spell it ``(Foil Trading Card)`` and report a plain
-  ``Trading Card`` type, so the name is the only signal there. Discovered foils are still
-  stored (flagged) for later foil support.
+* Foils are excluded from the set count via both the card ``type`` and a name check
+  covering Steam's two spellings, ``(Foil)`` and ``(Foil Trading Card)`` — the older sets
+  using the latter report a plain ``Trading Card`` type, so the name is the only signal
+  there. Discovered foils are still stored (flagged) for later foil support.
 
 The endpoint is unofficial, so a manual-import fallback is provided for blocked users.
 """
@@ -52,9 +52,10 @@ __all__ = [
 SEARCH_URL = "https://steamcommunity.com/market/search/render/"
 PARSER_VERSION = "1"
 
-#: A parenthesised "Foil" marker in the market_hash_name: matches both the modern
-#: "(Foil)" suffix and the older "(Foil Trading Card)" spelling, but not "(Foilball)".
-_FOIL_NAME_RE = re.compile(r"\(foil\b", re.IGNORECASE)
+#: The two spellings Steam uses for the foil marker in a market_hash_name: the modern
+#: "(Foil)" suffix and the older "(Foil Trading Card)". Matched in full rather than as a
+#: "(foil" prefix so a card genuinely named "... (Foil Hat)" is not misread as a foil.
+_FOIL_NAME_RE = re.compile(r"\((?:foil|foil trading card)\)", re.IGNORECASE)
 CATALOG_TTL_SECONDS = 7 * 24 * 3600  # a set's card list rarely changes
 PAGE_SIZE = 100
 MAX_PAGES = 5
@@ -89,12 +90,12 @@ class DiscoveryResult:
 
 
 def _is_foil(hash_name: str, card_type: str) -> bool:
-    # The canonical market_hash_name carries a parenthesised "Foil" marker regardless of
-    # locale — the reliable signal. Older sets spell it "(Foil Trading Card)" rather than
-    # "(Foil)", so match "(Foil" followed by a word boundary: that catches both spellings
-    # while a game title like "Foilball Trading Card" (no paren) or a hypothetical
-    # "(Foilball)" still classifies as a normal card. Fall back to an EXACT type match
-    # (not a substring, for the same reason).
+    # The canonical market_hash_name carries a parenthesised foil marker regardless of
+    # locale — the reliable signal. Steam uses two spellings: the modern "(Foil)" and the
+    # older "(Foil Trading Card)", whose `type` is a plain "Trading Card", so the name is
+    # the only signal there. Both are matched in full, so "Foilball Trading Card",
+    # "(Foilball)" and a card named "... (Foil Hat)" all stay normal cards. Fall back to an
+    # EXACT type match (not a substring, for the same reason).
     if _FOIL_NAME_RE.search(hash_name):
         return True
     return card_type.strip().lower() == "foil trading card"
