@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "GEMS_PER_SACK",
+    "MIN_LISTING_CENTS",
     "SACK_OF_GEMS_APPID",
     "SACK_OF_GEMS_HASH",
     "STEAM_MARKET_FEE",
@@ -48,6 +49,7 @@ __all__ = [
     "latest_sack_price",
     "refresh_sack_price",
     "sack_of_gems_item",
+    "seller_net_cents",
 ]
 
 #: A "Sack of Gems" bundles exactly this many gems into one marketable item.
@@ -57,11 +59,44 @@ GEMS_PER_SACK = 1000
 SACK_OF_GEMS_APPID = 753
 SACK_OF_GEMS_HASH = "753-Sack of Gems"
 
-#: Steam's market transaction fee (Steam + game), taken from the SELLER's proceeds and
-#: added on top to form the buyer's list price. So a seller of a listed item nets
-#: ``list / (1 + fee)``. Approximate and region-dependent — used only for the net-of-fee
-#: "what your gems are worth to sell" figure, never for costing a purchase.
+#: Steam's headline market fee (5% Steam + 10% game), kept for documentation and for the
+#: human-readable "~15%" phrasing in reports. Do NOT divide by it to get seller proceeds:
+#: each component carries a 1-cent minimum, so the real fee on a cheap item is far above
+#: 15%. Use :func:`seller_net_cents` instead.
 STEAM_MARKET_FEE = Decimal("0.15")
+
+#: Steam refuses listings below this price, so there is no seller-proceeds figure under it.
+MIN_LISTING_CENTS = 3
+
+
+def _fee_cents(net_cents: int) -> int:
+    """Steam's fee on a sale netting ``net_cents``: 5% + 10%, each floored at 1 cent."""
+    return max(1, net_cents * 5 // 100) + max(1, net_cents * 10 // 100)
+
+
+def seller_net_cents(buyer_cents: int) -> int:
+    """What a seller actually receives when a buyer pays ``buyer_cents``.
+
+    Steam computes its 5% cut and the game's 10% cut from the seller's proceeds, and each
+    is floored at 1 cent — so the minimum total fee on any sale is 2 cents regardless of
+    price. A flat ``price / 1.15`` therefore overstates proceeds badly at the low end:
+    at a 3-cent ask it claims 3 cents when the seller nets 1.
+
+    This inverts the fee exactly in integer cents — the largest ``net`` whose fees still
+    fit inside ``buyer_cents`` — rather than approximating. Returns 0 below Steam's
+    3-cent minimum listing price, where no sale is possible.
+    """
+    if buyer_cents < MIN_LISTING_CENTS:
+        return 0
+    # Seed from the flat approximation, then correct in both directions so the result is
+    # exact regardless of which side the seed lands on.
+    net = max(1, buyer_cents * 100 // 115)
+    while net > 1 and net + _fee_cents(net) > buyer_cents:
+        net -= 1
+    while net + _fee_cents(net + 1) + 1 <= buyer_cents:
+        net += 1
+    return net if net + _fee_cents(net) <= buyer_cents else 0
+
 
 #: Steam's booster-pack recipe numerator: gems-per-pack ≈ 6000 / (# distinct cards in set).
 #: A well-known community approximation (the exact figure is only on the login-gated
@@ -91,11 +126,13 @@ def sack_of_gems_item() -> MarketItem:
 def gem_value(sack_price: Money) -> GemValue:
     """Per-gem value from a Sack-of-Gems price (its currency; 1000 gems per sack).
 
-    Uses the Sack's price as-is for the gross figure and nets Steam's ~15% fee for the
-    resale figure. The currency is carried through unchanged.
+    Uses the Sack's price as-is for the gross figure. The resale figure nets Steam's fee
+    from the SACK price and only then divides: the fee's per-component 1-cent minimums
+    apply to the actual transaction (one sack sale), so netting a fractional per-gem
+    amount would silently drop them. The currency is carried through unchanged.
     """
     gross = Decimal(sack_price.cents) / GEMS_PER_SACK
-    net = gross / (Decimal(1) + STEAM_MARKET_FEE)
+    net = Decimal(seller_net_cents(sack_price.cents)) / GEMS_PER_SACK
     return GemValue(currency=sack_price.currency, cents_per_gem=gross, net_cents_per_gem=net)
 
 

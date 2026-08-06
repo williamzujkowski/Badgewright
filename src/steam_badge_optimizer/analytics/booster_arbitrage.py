@@ -27,7 +27,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 from ..models import Confidence, Money
-from .gem_economy import STEAM_MARKET_FEE
+from .gem_economy import seller_net_cents
 
 if TYPE_CHECKING:
     from ..db import Store
@@ -69,20 +69,23 @@ def evaluate_booster(
     booster_lowest_cents: int,
     *,
     currency: str,
-    fee: Decimal = STEAM_MARKET_FEE,
 ) -> tuple[Money, Money, int]:
     """Return (contents_ev_net, booster_cost, signed_margin_cents).
 
-    Contents EV = ``CARDS_PER_BOOSTER`` * mean(card lowest asks), netted of the seller fee
-    (``/ (1 + fee)``, matching the gem layer). Margin is the net EV minus the pack cost.
+    Contents EV = ``CARDS_PER_BOOSTER`` * mean(per-card NET proceeds). The fee is netted
+    PER CARD, not off the bundle: opening a pack yields separate cards sold in separate
+    transactions, and Steam's fee floors at 1 cent per component per sale. Netting the
+    aggregate would spread one minimum across three sales and overstate the takeaway —
+    at a 6-cent card that is 16 cents claimed against 12 actually received.
     """
     if not card_lowest_cents:
         raise ValueError("need at least one card price to estimate contents value")
     if booster_lowest_cents < 0:
         raise ValueError("booster_lowest_cents must be >= 0")
-    mean_card = Decimal(sum(card_lowest_cents)) / len(card_lowest_cents)
-    gross_ev = CARDS_PER_BOOSTER * mean_card
-    net_ev = gross_ev / (Decimal(1) + fee)
+    mean_net_card = Decimal(sum(seller_net_cents(c) for c in card_lowest_cents)) / len(
+        card_lowest_cents
+    )
+    net_ev = CARDS_PER_BOOSTER * mean_net_card
     net_ev_cents = int(net_ev.to_integral_value(rounding=ROUND_HALF_UP))
     return (
         Money(net_ev_cents, currency),

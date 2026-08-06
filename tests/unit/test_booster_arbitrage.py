@@ -149,11 +149,20 @@ class TestFetchBoosterPrice:
 
 class TestEvaluateBooster:
     def test_ev_is_three_cards_mean_net_of_fee(self) -> None:
-        # mean 40 -> gross 120 -> net 120/1.15 = 104.3 -> 104; pack 90 -> margin 14.
+        # Each card sells separately, so the fee is netted PER CARD: a 40c card nets 36c,
+        # three of them 108c; pack 90 -> margin 18. Netting the 120c bundle instead would
+        # spread one fee minimum across three sales and claim 104c.
         ev, cost, margin = evaluate_booster([40, 40, 40], 90, currency="USD")
-        assert ev == Money(104, "USD")
+        assert ev == Money(108, "USD")
         assert cost == Money(90, "USD")
-        assert margin == 14
+        assert margin == 18
+
+    def test_cheap_cards_do_not_fake_a_profit(self) -> None:
+        # 6c cards: three separate sales net 4c each = 12c, under the 15c pack. The old
+        # bundle-netting claimed 16c and flagged this as arbitrage.
+        ev, _, margin = evaluate_booster([6, 6, 6], 15, currency="USD")
+        assert ev == Money(12, "USD")
+        assert margin < 0
 
     def test_negative_margin_when_pack_dear(self) -> None:
         _, _, margin = evaluate_booster([10, 10, 10], 100, currency="USD")
@@ -181,12 +190,12 @@ class TestScanBoosterArbitrage:
     def test_flags_profitable_liquid_pack(self, tmp_path) -> None:
         with Store(tmp_path / "t.sqlite3") as store:
             for i in range(3):
-                _price(store, 220, f"220-C{i}", 100)  # mean 100 -> net EV 3*100/1.15=261
+                _price(store, 220, f"220-C{i}", 100)  # 100c card nets 88c; 3 -> 264c EV
             results = scan_booster_arbitrage(store, {220: self._quote(220, 200)}, currency="USD")
         assert len(results) == 1
         r = results[0]
         assert r.profitable and r.liquid
-        assert r.margin_cents == 261 - 200
+        assert r.margin_cents == 264 - 200
         assert r.confidence.value == "low"  # never above LOW: optimistic, high-variance
 
     def test_currency_mismatch_quote_skipped(self, tmp_path) -> None:
