@@ -112,7 +112,7 @@ class TestScan:
         with Store(tmp_path / "t.sqlite3") as store:
             _sack(store, 50)
             _card(store, 570, "570-X (Foil)", is_foil=True)
-            _goo(store, 570, "570-X (Foil)", 100)  # 100 gems => net 100*0.05/1.15 = 4.3 -> 4c
+            _goo(store, 570, "570-X (Foil)", 100)  # 100 gems => net 100*0.044 = 4.4 -> 4c
             _price(store, 570, "570-X (Foil)", 200)  # card 200c
             res = scan_card_gem_arbitrage(store, currency="USD")
         assert res[0].margin_cents == 4 - 200 and not res[0].profitable
@@ -134,8 +134,9 @@ class TestScan:
                 _goo(store, 570, name, goo)
                 _price(store, 570, name, cost)
             res = scan_card_gem_arbitrage(store, currency="USD")
-        # net values: C1 2000*0.05/1.15=87 -30 = 57; C0 35-25=10 -> C1 first
-        assert res[0].market_hash_name == "570-C1 (Foil)" and res[0].margin_cents == 57
+        # A 50c sack nets 44c, so 0.044c/gem: C1 2000 gems -> 88c, -30 = 58;
+        # C0 800 gems -> 35c, -25 = 10. C1 ranks first.
+        assert res[0].market_hash_name == "570-C1 (Foil)" and res[0].margin_cents == 58
 
 
 class TestCli:

@@ -18,6 +18,7 @@ from steam_badge_optimizer.analytics.gem_economy import (
     GEMS_PER_SACK,
     SACK_OF_GEMS_APPID,
     SACK_OF_GEMS_HASH,
+    seller_net_cents,
 )
 from steam_badge_optimizer.db import Store
 from steam_badge_optimizer.models import (
@@ -62,10 +63,11 @@ class TestGemValue:
         assert v.cents_per_gem == Decimal(50) / 1000  # 0.05¢
 
     def test_net_is_sellers_proceeds_after_fee(self) -> None:
-        # The 15% fee is on the seller's proceeds, added on top for the buyer price, so a
-        # seller nets list / 1.15 (NOT list * 0.85).
+        # The fee is taken from the seller's proceeds, and each of its two components
+        # (5% Steam, 10% game) floors at 1 cent. A 50c sack nets 44c, not 50/1.15 = 43.5c:
+        # at this price the 5% component is still pinned to its 1-cent minimum.
         v = gem_value(Money(50, "USD"))
-        assert v.net_cents_per_gem == v.cents_per_gem / Decimal("1.15")
+        assert v.net_cents_per_gem == Decimal(44) / 1000
         assert v.net_cents_per_gem < v.cents_per_gem
 
     def test_currency_carried_through(self) -> None:
@@ -79,8 +81,20 @@ class TestGemsToMoney:
 
     def test_net_is_after_fee_and_half_up(self) -> None:
         v = gem_value(Money(50, "USD"))
-        # 0.0425¢/gem * 1000 = 42.5 -> ROUND_HALF_UP -> 43.
-        assert gems_to_money(1000, v, net=True) == Money(43, "USD")
+        # A whole sack's worth of gems nets exactly what selling the sack nets.
+        assert gems_to_money(1000, v, net=True) == Money(44, "USD")
+
+    def test_low_price_fee_minimum_is_not_a_flat_percentage(self) -> None:
+        # The regression this guards: a flat price/1.15 claims a 3c sale nets 3c, when
+        # Steam's two 1-cent minimums mean the seller actually clears 1c. Cards and sacks
+        # trade in exactly this band, and the error direction manufactures fake profit.
+        for buyer, expected_net in [(3, 1), (5, 3), (10, 8), (25, 22), (100, 88)]:
+            assert seller_net_cents(buyer) == expected_net, buyer
+
+    def test_below_minimum_listing_price_nets_nothing(self) -> None:
+        # Steam refuses listings under 3c, so there are no proceeds to report.
+        assert seller_net_cents(2) == 0
+        assert seller_net_cents(0) == 0
 
     def test_zero_gems_is_zero(self) -> None:
         assert gems_to_money(0, gem_value(Money(50, "USD"))) == Money(0, "USD")
